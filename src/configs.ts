@@ -1036,7 +1036,7 @@ self.addEventListener('message', async (e) => {
 
 // Enhanced file receive function with Pied Piper decompression
 export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: number): Promise<{
-  data: Uint8Array;
+  data: Blob; // Changed to Blob to handle large files without freezing
   metadata: any;
   stats: {
     originalSize: number;
@@ -1184,15 +1184,8 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
 
     function finishReceiving() {
       try {
-        // Combine all decompressed chunks
-        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        
-        for (const chunk of chunks) {
-          result.set(chunk, offset);
-          offset += chunk.length;
-        }
+        // Combine all decompressed chunks into a Blob to avoid memory issues with large files
+        const result = new Blob(chunks);
         
         const endTime = performance.now();
         const transferTime = (endTime - startTime) / 1000;

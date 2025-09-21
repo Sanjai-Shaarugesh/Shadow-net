@@ -132,7 +132,7 @@ export const MetaData = {
       writer.uint32(10).string(message.name);
     }
     if (message.size !== 0) {
-      writer.uint32(16).int32(message.size);
+      writer.uint32(16).int64(message.size);
     }
     if (message.type !== '') {
       writer.uint32(26).string(message.type);
@@ -162,7 +162,7 @@ export const MetaData = {
             break;
           }
 
-          message.size = reader.int32();
+          message.size = Number(reader.int64());
           continue;
         case 3:
           if (tag != 26) {
