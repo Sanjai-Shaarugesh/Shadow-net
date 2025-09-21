@@ -6,7 +6,8 @@ export enum FileStatus {
   WaitingAccept = 'WaitingAccept',
   Processing = 'Processing',
   Success = 'Success',
-  Error = "Error"
+  Error = "Error",
+  Receiving = "Receiving"
 }
 
 export enum ConnectionStatus {

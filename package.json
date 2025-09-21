@@ -58,6 +58,7 @@
   "dependencies": {
     "@astrojs/react": "^4.3.0",
     "@astrojs/upgrade": "^0.5.2",
+    "@bokuweb/zstd-wasm": "^0.0.27",
     "@capacitor-community/app-icon": "^6.0.0",
     "@capacitor-community/barcode-scanner": "^4.0.1",
     "@capacitor/android": "^7.4.2",
