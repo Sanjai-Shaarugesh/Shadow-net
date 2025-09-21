@@ -534,62 +534,90 @@ export async function decompressWithPiedPiper(compressedData: Uint8Array): Promi
 
 // Enhanced file chunk processing with Pied Piper compression
 export async function processFileChunk(chunk: Uint8Array, compressionLevel: number = 20): Promise<Uint8Array> {
+  const originalSize = chunk.length;
+  let compressedData: Uint8Array = chunk;
+  let algorithm = 0; // 0: none, 1: PP, 2: ZSTD
+  let weiszmanScore = 0;
+
   try {
     console.log(`🥧 Processing chunk with Pied Piper middle-out algorithm...`);
-    
-    const result = await compressWithPiedPiper(chunk, compressionLevel);
-    
-    // Add Pied Piper metadata header (8 bytes)
-    const metadata = new Uint8Array(8);
-    const originalSize = chunk.length;
-    const weiszmanScore = Math.floor(result.weiszmanScore * 100);
-    
-    metadata[0] = (originalSize >>> 24) & 0xFF;
-    metadata[1] = (originalSize >>> 16) & 0xFF;
-    metadata[2] = (originalSize >>> 8) & 0xFF;
-    metadata[3] = originalSize & 0xFF;
-    metadata[4] = 0x50; // 'P' for Pied Piper
-    metadata[5] = 0x50; // 'P' for Pied Piper  
-    metadata[6] = (weiszmanScore >>> 8) & 0xFF;
-    metadata[7] = weiszmanScore & 0xFF;
-
-    // Combine metadata with compressed data
-    const finalResult = new Uint8Array(metadata.length + result.compressedData.length);
-    finalResult.set(metadata, 0);
-    finalResult.set(result.compressedData, metadata.length);
-
-    const compressionSavings = ((chunk.length - finalResult.length) / chunk.length * 100);
-    console.log(`🥧 Pied Piper chunk compression: ${compressionSavings.toFixed(1)}% savings (${chunk.length} → ${finalResult.length} bytes)`);
-    
-    return finalResult;
+    const ppResult = await compressWithPiedPiper(chunk, compressionLevel);
+    if (ppResult.compressedData.length < originalSize) {
+      compressedData = ppResult.compressedData;
+      algorithm = 1;
+      weiszmanScore = ppResult.weiszmanScore;
+      console.log(`🥧 Pied Piper success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
+    } else {
+      console.log(`🥧 Pied Piper not beneficial (${ppResult.compressedData.length} > ${originalSize}), trying ZSTD...`);
+      const zstdData = await compressWithZstdFallback(chunk);
+      if (zstdData.length < originalSize) {
+        compressedData = zstdData;
+        algorithm = 2;
+        weiszmanScore = ppResult.weiszmanScore; // Reuse or calculate new, but for simplicity
+        console.log(`🥧 ZSTD success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
+      } else {
+        console.log(`🥧 ZSTD not beneficial (${zstdData.length} > ${originalSize}), using original`);
+        compressedData = chunk;
+        algorithm = 0;
+        weiszmanScore = 0;
+      }
+    }
   } catch (error) {
-    console.error('🥧 Pied Piper compression failed:', error);
-    return processFileChunkFallback(chunk);
+    console.error('🥧 Compression failed, falling back to original:', error);
+    compressedData = chunk;
+    algorithm = 0;
+    weiszmanScore = 0;
   }
+
+  // Add metadata header (8 bytes)
+  const metadata = new Uint8Array(8);
+  metadata[0] = (originalSize >>> 24) & 0xFF;
+  metadata[1] = (originalSize >>> 16) & 0xFF;
+  metadata[2] = (originalSize >>> 8) & 0xFF;
+  metadata[3] = originalSize & 0xFF;
+  metadata[4] = algorithm;
+  metadata[5] = 0; // Reserved
+  const scoreInt = Math.floor(weiszmanScore * 100);
+  metadata[6] = (scoreInt >>> 8) & 0xFF;
+  metadata[7] = scoreInt & 0xFF;
+
+  // Combine metadata with compressed data
+  const finalResult = new Uint8Array(metadata.length + compressedData.length);
+  finalResult.set(metadata, 0);
+  finalResult.set(compressedData, metadata.length);
+
+  return finalResult;
 }
 
 // Enhanced file chunk decompression with Pied Piper
 export async function decompressFileChunk(compressedChunk: Uint8Array): Promise<Uint8Array> {
   try {
     if (compressedChunk.length < 8) {
-      throw new Error('Invalid Pied Piper chunk: too small');
+      throw new Error('Invalid chunk: too small');
     }
 
-    // Extract Pied Piper metadata
+    // Extract metadata
     const metadata = compressedChunk.slice(0, 8);
     const originalSize = (metadata[0] << 24) | (metadata[1] << 16) | (metadata[2] << 8) | metadata[3];
-    const isPiedPiper = metadata[4] === 0x50 && metadata[5] === 0x50;
+    const algorithm = metadata[4];
+    // metadata[5] reserved
     const weiszmanScore = ((metadata[6] << 8) | metadata[7]) / 100;
     
-    if (!isPiedPiper) {
-      console.warn('🥧 Not a Pied Piper compressed chunk, using fallback');
-      return await decompressWithZstdFallback(compressedChunk.slice(8));
+    const data = compressedChunk.slice(8);
+    let decompressedData: Uint8Array;
+
+    if (algorithm === 1) {
+      console.log(`🥧 Decompressing Pied Piper chunk (Weiszman Score: ${weiszmanScore.toFixed(2)})...`);
+      decompressedData = await decompressWithPiedPiper(data);
+    } else if (algorithm === 2) {
+      console.log(`🥧 Decompressing ZSTD chunk...`);
+      decompressedData = await decompressWithZstdFallback(data);
+    } else if (algorithm === 0) {
+      console.log(`🥧 No compression, returning original chunk...`);
+      decompressedData = data;
+    } else {
+      throw new Error(`Unknown compression algorithm: ${algorithm}`);
     }
-    
-    const compressedData = compressedChunk.slice(8);
-    console.log(`🥧 Decompressing Pied Piper chunk (Weiszman Score: ${weiszmanScore.toFixed(2)})...`);
-    
-    const decompressedData = await decompressWithPiedPiper(compressedData);
 
     // Verify decompressed size matches expected size
     if (decompressedData.length !== originalSize) {
@@ -598,8 +626,8 @@ export async function decompressFileChunk(compressedChunk: Uint8Array): Promise<
 
     return decompressedData;
   } catch (error) {
-    console.warn('🥧 Pied Piper decompression failed, using fallback:', error);
-    return compressedChunk.length > 8 ? compressedChunk.slice(8) : compressedChunk;
+    console.warn('🥧 Decompression failed:', error);
+    return compressedChunk;
   }
 }
 
@@ -681,11 +709,6 @@ async function decompressWithZstdFallback(compressedData: Uint8Array): Promise<U
       return compressedData;
     }
   }
-}
-
-// Fallback for chunk processing (original implementation)
-function processFileChunkFallback(chunk: Uint8Array): Uint8Array {
-  return chunk;
 }
 
 // Detect network quality for adaptive settings
@@ -849,8 +872,7 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
       chunkCount++;
       
       // Extract Weiszman score from chunk metadata for tracking
-      if (compressedChunk.length >= 8 && 
-          compressedChunk[4] === 0x50 && compressedChunk[5] === 0x50) {
+      if (compressedChunk.length >= 8) {
         const weiszmanScore = ((compressedChunk[6] << 8) | compressedChunk[7]) / 100;
         totalWeiszmanScore += weiszmanScore;
       }
@@ -910,12 +932,10 @@ function initializeDecompressionWorker() {
 import { init, decompress } from '@bokuweb/zstd-wasm';
 
 class MiddleOutDictionary {
-  // ... (paste the entire MiddleOutDictionary class code here)
   ${MiddleOutDictionary.toString().replace(/^class /, '')}
 }
 
 class PiedPiperCompressionEngine {
-  // ... (paste the entire PiedPiperCompressionEngine class code here)
   ${PiedPiperCompressionEngine.toString().replace(/^class /, '')}
 }
 
@@ -929,11 +949,9 @@ function getPiedPiperEngine() {
 
 async function decompressWithPiedPiper(compressedData) {
   const engine = getPiedPiperEngine();
-  // console.log removed for worker
   const startTime = performance.now();
   const result = engine.decompress(compressedData);
   const endTime = performance.now();
-  // console.log removed
   return result;
 }
 
@@ -943,7 +961,6 @@ async function decompressWithZstdFallback(compressedData) {
     const decompressed = decompress(compressedData);
     return decompressed;
   } catch (error) {
-    // console.warn removed
     if (typeof Bun !== 'undefined') {
       return Bun.gunzipSync(compressedData);
     } else if ('DecompressionStream' in self) {
@@ -974,23 +991,29 @@ async function decompressWithZstdFallback(compressedData) {
 async function decompressFileChunk(compressedChunk) {
   try {
     if (compressedChunk.length < 8) {
-      throw new Error('Invalid Pied Piper chunk: too small');
+      throw new Error('Invalid chunk: too small');
     }
     const metadata = compressedChunk.slice(0, 8);
     const originalSize = (metadata[0] << 24) | (metadata[1] << 16) | (metadata[2] << 8) | metadata[3];
-    const isPiedPiper = metadata[4] === 0x50 && metadata[5] === 0x50;
+    const algorithm = metadata[4];
     const weiszmanScore = ((metadata[6] << 8) | metadata[7]) / 100;
-    if (!isPiedPiper) {
-      return await decompressWithZstdFallback(compressedChunk.slice(8));
+    const data = compressedChunk.slice(8);
+    let decompressedData;
+    if (algorithm === 1) {
+      decompressedData = await decompressWithPiedPiper(data);
+    } else if (algorithm === 2) {
+      decompressedData = await decompressWithZstdFallback(data);
+    } else if (algorithm === 0) {
+      decompressedData = data;
+    } else {
+      throw new Error(\`Unknown compression algorithm: \${algorithm}\`);
     }
-    const compressedData = compressedChunk.slice(8);
-    const decompressedData = await decompressWithPiedPiper(compressedData);
     if (decompressedData.length !== originalSize) {
-      // warn removed
+      // warn
     }
     return decompressedData;
   } catch (error) {
-    return compressedChunk.length > 8 ? compressedChunk.slice(8) : compressedChunk;
+    return compressedChunk;
   }
 }
 
@@ -1116,8 +1139,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
 
           // Extract Weiszman score from chunk metadata for tracking
           let weiszmanScore = 0;
-          if (compressedChunk.length >= 8 && 
-              compressedChunk[4] === 0x50 && compressedChunk[5] === 0x50) {
+          if (compressedChunk.length >= 8) {
             weiszmanScore = ((compressedChunk[6] << 8) | compressedChunk[7]) / 100;
           }
 
@@ -1174,7 +1196,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
         
         const endTime = performance.now();
         const transferTime = (endTime - startTime) / 1000;
-        const compressionRatio = totalReceived > 0 ? ((totalDecompressed - totalReceived) / totalDecompressed) * 100 : 0;
+        const compressionRatio = totalReceived > 0 ? Math.max(0, ((totalDecompressed - totalReceived) / totalDecompressed) * 100) : 0;
         const avgWeiszmanScore = chunkCount > 0 ? totalWeiszmanScore / chunkCount : 0;
         
         const stats = {
