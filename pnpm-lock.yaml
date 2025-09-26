@@ -14,6 +14,9 @@ importers:
       '@astrojs/upgrade':
         specifier: ^0.5.2
         version: 0.5.2
+      '@bokuweb/zstd-wasm':
+        specifier: ^0.0.27
+        version: 0.0.27
       '@capacitor-community/app-icon':
         specifier: ^6.0.0
         version: 6.0.0(@capacitor/core@7.4.2)
@@ -273,6 +276,9 @@ importers:
       '@nuintun/qrcode':
         specifier: ^3.4.0
         version: 3.4.0
+      '@types/bun':
+        specifier: ^1.2.22
+        version: 1.2.22(@types/react@19.1.8)
       '@types/pako':
         specifier: ^2.0.3
         version: 2.0.3
@@ -941,6 +947,9 @@ packages:
   '@babel/types@7.28.2':
     resolution: {integrity: sha512-ruv7Ae4J5dUYULmeXw1gmb7rYRz57OWCPM57pHojnLq/3Z1CK2lNSLTCVjxVk1F/TZHwOZZrOWi0ur95BbLxNQ==}
     engines: {node: '>=6.9.0'}
+
+  '@bokuweb/zstd-wasm@0.0.27':
+    resolution: {integrity: sha512-GDm2uOTK3ESjnYmSeLQifJnBsRCWajKLvN32D2ZcQaaCIJI/Hse9s74f7APXjHit95S10UImsRGkTsbwHmrtmg==}
 
   '@capacitor-community/app-icon@6.0.0':
     resolution: {integrity: sha512-w0+uk24zxN63KygdBbon0Ni2MPJahotk92iT/UszdApww/Tq4/zCpXKbl0Q1ls2IElj5cTgdH7njrHwc2S1zMQ==}
@@ -2506,6 +2515,9 @@ packages:
   '@types/bittorrent-protocol@3.1.6':
     resolution: {integrity: sha512-hqiRctJX9t9kknr6nn0q7UlcWHKvw2gSnPc/4jxt7Q/T0RP9txNv27Djue9ZjCNlAJ+irqAnCxtb+TcSpMyhtA==}
 
+  '@types/bun@1.2.22':
+    resolution: {integrity: sha512-5A/KrKos2ZcN0c6ljRSOa1fYIyCKhZfIVYeuyb4snnvomnpFqC0tTsEkdqNxbAgExV384OETQ//WAjl3XbYqQA==}
+
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
@@ -3290,6 +3302,11 @@ packages:
   builtin-modules@3.3.0:
     resolution: {integrity: sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==}
     engines: {node: '>=6'}
+
+  bun-types@1.2.22:
+    resolution: {integrity: sha512-hwaAu8tct/Zn6Zft4U9BsZcXkYomzpHJX28ofvx7k0Zz2HNz54n1n+tDgxoWFGB4PcFvJXJQloPhaV2eP3Q6EA==}
+    peerDependencies:
+      '@types/react': ^19
 
   cache-chunk-store@3.2.2:
     resolution: {integrity: sha512-2lJdWbgHFFxcSth9s2wpId3CR3v1YC63KjP4T9WhpW7LWlY7Hiiei3QwwqzkWqlJTfR8lSy9F5kRQECeyj+yQA==}
@@ -9727,6 +9744,8 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.27.1
 
+  '@bokuweb/zstd-wasm@0.0.27': {}
+
   '@capacitor-community/app-icon@6.0.0(@capacitor/core@7.4.2)':
     dependencies:
       '@capacitor/core': 7.4.2
@@ -11249,6 +11268,12 @@ snapshots:
     dependencies:
       '@types/node': 24.1.0
 
+  '@types/bun@1.2.22(@types/react@19.1.8)':
+    dependencies:
+      bun-types: 1.2.22(@types/react@19.1.8)
+    transitivePeerDependencies:
+      - '@types/react'
+
   '@types/cookie@0.6.0': {}
 
   '@types/debug@4.1.12':
@@ -12340,6 +12365,11 @@ snapshots:
     optional: true
 
   builtin-modules@3.3.0: {}
+
+  bun-types@1.2.22(@types/react@19.1.8):
+    dependencies:
+      '@types/node': 24.1.0
+      '@types/react': 19.1.8
 
   cache-chunk-store@3.2.2:
     dependencies:

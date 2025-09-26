@@ -110,7 +110,7 @@ class MiddleOutDictionary {
   }
 }
 
-// Pied Piper's Revolutionary Middle-Out Compression Engine
+// Pied Piper's Revolutionary Middle-Out Compression Engine developed by sanjai Shaarugesh
 class PiedPiperCompressionEngine {
   private dictionary: MiddleOutDictionary;
   private config: PiedPiperConfig;
@@ -120,7 +120,7 @@ class PiedPiperCompressionEngine {
     this.config = config;
   }
 
-  // The legendary middle-out algorithm implementation
+  // The legendary middle-out algorithm implementation more efficent than old one
   private findMiddleOutPosition(data: Uint8Array): number {
     const length = data.length;
     const goldenRatio = this.config.middleOutRatio;
@@ -839,7 +839,7 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
       fileName: file.name,
       fileSize: fileSize,
       mimeType: file.type,
-      algorithm: 'Pied Piper Middle-Out v1.0',
+      algorithm: 'Pied Piper Middle-Out v1.0 developed by sanjai Shaarugesh',
       timestamp: Date.now()
     };
     
@@ -883,13 +883,13 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
       const progress = (offset / fileSize) * 100;
       options.onProgress(progress);
       
-      if (chunkCount % 10 === 0) { // Log every 10 chunks
+      if (chunkCount % 10 === 0) { // Log every 10 chunks to see what's happening
         const currentCompressionRatio = ((fileSize - totalCompressedSize) / Math.min(offset, fileSize)) * 100;
         const avgWeiszmanScore = totalWeiszmanScore / chunkCount;
         console.log(`🥧 Progress: ${progress.toFixed(1)}% | Compression: ${currentCompressionRatio.toFixed(1)}% | Avg Weiszman: ${avgWeiszmanScore.toFixed(2)}`);
       }
       
-      // Add small delay to prevent overwhelming the network
+      // Add small delay to prevent overwhelming the network for parallel chunks with lossless data transfer
       if (options.parallelChunks <= 2) {
         await new Promise(resolve => setTimeout(resolve, 1));
       }

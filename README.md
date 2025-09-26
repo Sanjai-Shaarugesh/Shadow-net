@@ -52,6 +52,43 @@ Speed-share is a modern web application that enables seamless peer-to-peer file 
 
 </div>
 
+
+```mermaid
+C4Context
+    Component(stun, "STUN Server")
+
+    Boundary(b, "", "") {
+        Person(bob, "Bob", "Bob Zero Share")
+        Person(alice, "Alice", "Alice Zero Share")
+    }
+
+    Rel(sanjai, stun, "get ice candidates")
+    UpdateRelStyle(sanjai, stun, $offsetX="-90", $offsetY="-40")
+
+    Rel(bob, stun, "get ice candidates")
+    UpdateRelStyle(bob, stun, $offsetX="-90", $offsetY="-40")
+
+    BiRel(sanjai, bob, "file transfer")
+    UpdateRelStyle(sanjai, bob, $offsetX="-30")
+```
+
+Example sequence, Alice want to send a file to Bob.
+
+```mermaid
+sequenceDiagram
+    actor Alice
+    actor Bob
+    sanjai-->>sanjai: generate offer sdp
+    sanjai->>monish: send offer link
+    monish-->>monish: generate RSA keypair
+    monish-->>monish: generate answer sdp
+    monish->>sanjai: send answer sdp + RSA pub key
+    sanjai-->>sanjai: encrypt file with AES key
+    sanjai-->>sanjai: encrypt AES key with RSA pub key
+    sanjai->>monish: send encrypted file + encrypted AES key
+    monish-->>monish: decrypt file with decrypted AES key
+```
+
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Raising%20Hands.png" width="25px" alt="Sender"> For Senders:
 
 1. Visit [Speed-share](https://speed-shares.vercel.app/)

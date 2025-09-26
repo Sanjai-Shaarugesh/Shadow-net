@@ -19,6 +19,7 @@
     "@astrojs/tailwind": "^6.0.2",
     "@capacitor/assets": "^3.0.5",
     "@nuintun/qrcode": "^3.4.0",
+    "@types/bun": "^1.2.22",
     "@types/pako": "^2.0.3",
     "@types/throttle-debounce": "^5.0.2",
     "@types/uuid": "^10.0.0",
