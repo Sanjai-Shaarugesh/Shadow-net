@@ -62,14 +62,14 @@ C4Context
         Person(alice, "Alice", "Alice Zero Share")
     }
 
-    Rel(sanjai, stun, "get ice candidates")
-    UpdateRelStyle(sanjai, stun, $offsetX="-90", $offsetY="-40")
+    Rel(alice, stun, "get ice candidates")
+    UpdateRelStyle(alice, stun, $offsetX="-90", $offsetY="-40")
 
     Rel(bob, stun, "get ice candidates")
     UpdateRelStyle(bob, stun, $offsetX="-90", $offsetY="-40")
 
-    BiRel(sanjai, bob, "file transfer")
-    UpdateRelStyle(sanjai, bob, $offsetX="-30")
+    BiRel(alice, bob, "file transfer")
+    UpdateRelStyle(alice, bob, $offsetX="-30")
 ```
 
 Example sequence, Alice want to send a file to Bob.
@@ -78,15 +78,15 @@ Example sequence, Alice want to send a file to Bob.
 sequenceDiagram
     actor Alice
     actor Bob
-    sanjai-->>sanjai: generate offer sdp
-    sanjai->>monish: send offer link
-    monish-->>monish: generate RSA keypair
-    monish-->>monish: generate answer sdp
-    monish->>sanjai: send answer sdp + RSA pub key
-    sanjai-->>sanjai: encrypt file with AES key
-    sanjai-->>sanjai: encrypt AES key with RSA pub key
-    sanjai->>monish: send encrypted file + encrypted AES key
-    monish-->>monish: decrypt file with decrypted AES key
+    Alice-->>Alice: generate offer sdp
+    Alice->>Bob: send offer link
+    Bob-->>Bob: generate RSA keypair
+    Bob-->>Bob: generate answer sdp
+    Bob->>Alice: send answer sdp + RSA pub key
+    Alice-->>Alice: encrypt file with AES key
+    Alice-->>Alice: encrypt AES key with RSA pub key
+    Alice->>Bob: send encrypted file + encrypted AES key
+    Bob-->>Bob: decrypt file with decrypted AES key
 ```
 
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Raising%20Hands.png" width="25px" alt="Sender"> For Senders:
