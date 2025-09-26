@@ -94,7 +94,7 @@
         chatHistory.push(chatMessage);
         // Ensure the array reference is updated for Svelte reactivity
         chatHistory = chatHistory; 
-        addToastMessage(`New Message: ${chatMessage.message.substring(0, 30)}...`, 'chat');
+        addToastMessage(`🗞️ New Message: ${chatMessage.message.substring(0, 30)}...`, 'chat');
       } catch (e) {
         console.error('Failed to parse chat message:', e);
       }

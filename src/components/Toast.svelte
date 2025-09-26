@@ -40,7 +40,8 @@
                                 ${toast.status === 'success' ? 'bg-green-600' : ''}
                                 ${toast.status === 'error' ? 'bg-red-600' : ''}
                                 ${toast.status === 'info' ? 'bg-blue-600' : ''}
-                                ${toast.status === 'warning' ? 'bg-yellow-600 text-black' : ''}`}
+                                ${toast.status === 'warning' ? 'bg-yellow-600 text-black' : ''}
+                                ${toast.status === 'chat' ? 'bg-green-400 text-white' : ''}`}
                               in:fade={{ duration: 300 }}
                               out:fade={{ duration: 300 }}
                             >
