@@ -7,7 +7,7 @@
   import { validateFileMetadata } from '../../utils/validator';
   import { Message, MetaData, ReceiveEvent, receiveEventToJSON } from '../../proto/message';
   import { addToastMessage } from '../../stores/toastStore';
-  import { RollerCoaster } from '@lucide/svelte';
+  import { RollerCoaster, Send } from '@lucide/svelte'; // Added Send icon
 
   type Props = {
     dataChannel: RTCDataChannel;
@@ -19,6 +19,47 @@
   const { dataChannel, chunkSize, isEncrypt, rsaPub }: Props = $props();
 
   let sendingFiles: { [key: string]: SendingFile } = $state({});
+  let chatMessage = $state(''); // State for the chat input
+
+  // --- New Chat Functionality ---
+
+  function sendChatMessage() {
+    if (chatMessage.trim() === '') return;
+
+    const chatData = JSON.stringify({
+      type: 'chat',
+      message: chatMessage.trim(),
+      timestamp: Date.now()
+    });
+
+    try {
+      // Use a special ID and send the chat message as a string
+      // NOTE: dataChannel.send(string) is for simple text messages.
+      // Since the existing code uses proto encoding for *everything*, we must
+      // encode the chat message *as* a chunk of data, or, more simply,
+      // as a string if we're sure the receiver can handle it, but the existing
+      // code only calls dataChannel.send() with the result of Message.encode().
+      // Let's adapt it to use Message.encode by putting the chat message in the 'chunk' field
+      // with a reserved ID.
+
+      dataChannel.send(
+        Message.encode({
+          id: '__CHAT_MESSAGE__', // Reserved ID for chat messages
+          chunk: new TextEncoder().encode(chatData) // Encode the JSON string as Uint8Array
+        }).finish()
+      );
+
+      addToastMessage('Message Sent', 'info');
+      chatMessage = ''; // Clear the input
+      // In a full implementation, you'd add this message to a chat history state
+      // that is displayed in the UI.
+    } catch (e) {
+      console.error('Failed to send chat message:', e);
+      addToastMessage('Failed to send message', 'error');
+    }
+  }
+
+  // --- End New Chat Functionality ---
 
   export function onReceiveEvent(id: string, receiveEvent: ReceiveEvent) {
     const sendingFile = sendingFiles[id];
@@ -191,6 +232,20 @@
 </script>
 
 <div class="grid gap-4">
+  <div class="flex gap-2">
+    <input
+      type="text"
+      bind:value={chatMessage}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') sendChatMessage();
+      }}
+      placeholder="Type a real-time message..."
+      class="input input-bordered w-full"
+    />
+    <button class="btn btn-primary" onclick={sendChatMessage} disabled={!dataChannel || dataChannel.readyState !== 'open'}>
+      <Send class="w-5 h-5" />
+    </button>
+  </div>
   <DragAndDrop {onFilesPick} />
   {#if Object.keys(sendingFiles).length > 0}
     <SendingFileList {sendingFiles} {onRemove} {onSend} {onStop} {onContinue} />

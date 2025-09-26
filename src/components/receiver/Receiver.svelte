@@ -21,6 +21,7 @@
 
   let receiveOptions: ReceiveOptions = $state(defaultReceiveOptions);
   let receivingFiles: { [key: string]: ReceivingFile } = $state({});
+  let chatHistory: { message: string, timestamp: number }[] = $state([]); // New state for chat history
   
   // Detect platform
   let isMobile = $state(false);
@@ -85,6 +86,23 @@
   }
 
   export async function onChunkData(id: string, chunk: Uint8Array) {
+    // --- New Chat Handling ---
+    if (id === '__CHAT_MESSAGE__') {
+      try {
+        const chatDataString = new TextDecoder().decode(chunk);
+        const chatMessage = JSON.parse(chatDataString);
+        chatHistory.push(chatMessage);
+        // Ensure the array reference is updated for Svelte reactivity
+        chatHistory = chatHistory; 
+        addToastMessage(`New Message: ${chatMessage.message.substring(0, 30)}...`, 'chat');
+      } catch (e) {
+        console.error('Failed to parse chat message:', e);
+      }
+      // Do *not* send a receive event back for chat messages to avoid file transfer logic interference
+      return;
+    }
+    // --- End New Chat Handling ---
+    
     let arrayBuffer = chunk;
 
     dataChannel.send(
@@ -280,10 +298,31 @@
   function onOptionsUpdate(options: ReceiveOptions) {
     receiveOptions = options;
   }
+
+  // Helper to format chat timestamp
+  function formatTime(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
 </script>
 
 <div class="grid gap-4">  
   <ReceiverOptions onUpdate={onOptionsUpdate} />
+  
+  <div class="border rounded-lg p-3 bg-gray-50 [html[data-theme=dark]_&]:bg-gray-800 h-64 overflow-y-auto">
+    <h3 class="font-bold text-sm mb-2 text-gray-700 [html[data-theme=dark]_&]:text-gray-300">Real-time Chat</h3>
+    {#if chatHistory.length === 0}
+      <p class="text-sm text-gray-500 [html[data-theme=dark]_&]:text-gray-400">No messages yet. Messages from the sender will appear here.</p>
+    {:else}
+      {#each chatHistory as chat (chat.timestamp)}
+        <div class="chat chat-start">
+          <div class="chat-bubble chat-bubble-primary text-sm">
+            <span class="text-xs opacity-70 block mb-1">Sender {formatTime(chat.timestamp)}</span>
+            {chat.message}
+          </div>
+        </div>
+      {/each}
+    {/if}
+  </div>
   {#if Object.keys(receivingFiles).length > 0}
     <ReceivingFileList {receivingFiles} {onRemove} {onDownload} {onAccept} {onDeny} />
     <button class="btn btn-dash btn-success mt-2" onclick={downloadAllFiles}>
