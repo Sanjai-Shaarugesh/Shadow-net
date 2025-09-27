@@ -123,7 +123,7 @@
           directory: Directory.Cache
         });
 
-        console.log('🔗 Temp file created for sharing:', result.uri);
+        // console.log('🔗 Temp file created for sharing:', result.uri);
 
         // Share the file
         await Share.share({
@@ -137,7 +137,7 @@
         await Haptics.impact({ style: ImpactStyle.Medium });
         await showToast('📤 QR Code shared!');
 
-        console.log('✅ QR Code shared successfully');
+        // console.log('✅ QR Code shared successfully');
 
       } else {
         // Web fallback
@@ -205,7 +205,7 @@
               });
               savedLocation = 'Downloads folder';
             } catch (androidError) {
-              console.log('External storage failed, trying Documents:', androidError);
+              // console.log('External storage failed, trying Documents:', androidError);
               // Fallback: Documents directory
               result = await Filesystem.writeFile({
                 path: fileName,
@@ -236,9 +236,9 @@
           await Haptics.impact({ style: ImpactStyle.Medium });
           await showToast(`✅ QR saved to ${savedLocation}`);
 
-          console.log('✅ File saved successfully!');
-          console.log('📁 Path:', result.uri);
-          console.log('📱 Platform:', Capacitor.getPlatform());
+          // console.log('✅ File saved successfully!');
+          // console.log('📁 Path:', result.uri);
+          // console.log('📱 Platform:', Capacitor.getPlatform());
 
         } catch (primaryError) {
           console.error('Primary save failed:', primaryError);
@@ -253,7 +253,7 @@
 
             await Haptics.impact({ style: ImpactStyle.Light });
             await showToast('⚠️ QR saved to app cache (temporary)');
-            console.log('📦 Fallback: File saved to cache:', cacheResult.uri);
+            // console.log('📦 Fallback: File saved to cache:', cacheResult.uri);
 
           } catch (cacheError) {
             console.error('❌ All save methods failed:', cacheError);

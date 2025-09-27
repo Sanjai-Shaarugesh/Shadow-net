@@ -493,7 +493,7 @@ export async function compressWithPiedPiper(data: Uint8Array, compressionLevel: 
 }> {
   const engine = getPiedPiperEngine();
   
-  console.log(`🥧 Pied Piper: Starting middle-out compression on ${data.length} bytes...`);
+  // console.log(`🥧 Pied Piper: Starting middle-out compression on ${data.length} bytes...`);
   const startTime = performance.now();
   
   const result = engine.compress(data);
@@ -501,15 +501,15 @@ export async function compressWithPiedPiper(data: Uint8Array, compressionLevel: 
   const endTime = performance.now();
   const compressionTime = endTime - startTime;
   
-  console.log(`🥧 Pied Piper: Compression complete!`);
-  console.log(`   📊 Original size: ${result.metadata.originalSize.toLocaleString()} bytes`);
-  console.log(`   📦 Compressed size: ${result.metadata.compressedSize.toLocaleString()} bytes`);
-  console.log(`   📈 Compression ratio: ${(result.compressionRatio * 100).toFixed(1)}%`);
-  console.log(`   🏆 Weiszman Score: ${result.weiszmanScore.toFixed(2)}`);
-  console.log(`   🎯 Middle-out position: ${result.metadata.middleOutPosition}`);
-  console.log(`   🔍 Patterns found: ${result.metadata.patterns}`);
-  console.log(`   ⏱️ Compression time: ${compressionTime.toFixed(2)}ms`);
-  console.log(`   🚀 Algorithm: ${result.metadata.algorithm}`);
+  // console.log(`🥧 Pied Piper: Compression complete!`);
+  // console.log(`   📊 Original size: ${result.metadata.originalSize.toLocaleString()} bytes`);
+  // console.log(`   📦 Compressed size: ${result.metadata.compressedSize.toLocaleString()} bytes`);
+  // console.log(`   📈 Compression ratio: ${(result.compressionRatio * 100).toFixed(1)}%`);
+  // console.log(`   🏆 Weiszman Score: ${result.weiszmanScore.toFixed(2)}`);
+  // console.log(`   🎯 Middle-out position: ${result.metadata.middleOutPosition}`);
+  // console.log(`   🔍 Patterns found: ${result.metadata.patterns}`);
+  // console.log(`   ⏱️ Compression time: ${compressionTime.toFixed(2)}ms`);
+  // console.log(`   🚀 Algorithm: ${result.metadata.algorithm}`);
   
   return result;
 }
@@ -518,7 +518,7 @@ export async function compressWithPiedPiper(data: Uint8Array, compressionLevel: 
 export async function decompressWithPiedPiper(compressedData: Uint8Array): Promise<Uint8Array> {
   const engine = getPiedPiperEngine();
   
-  console.log(`🥧 Pied Piper: Starting middle-out decompression...`);
+  // console.log(`🥧 Pied Piper: Starting middle-out decompression...`);
   const startTime = performance.now();
   
   const result = engine.decompress(compressedData);
@@ -526,8 +526,8 @@ export async function decompressWithPiedPiper(compressedData: Uint8Array): Promi
   const endTime = performance.now();
   const decompressionTime = endTime - startTime;
   
-  console.log(`🥧 Pied Piper: Decompression complete in ${decompressionTime.toFixed(2)}ms`);
-  console.log(`   📤 Decompressed ${result.length.toLocaleString()} bytes`);
+  // console.log(`🥧 Pied Piper: Decompression complete in ${decompressionTime.toFixed(2)}ms`);
+  // console.log(`   📤 Decompressed ${result.length.toLocaleString()} bytes`);
   
   return result;
 }
@@ -540,23 +540,23 @@ export async function processFileChunk(chunk: Uint8Array, compressionLevel: numb
   let weiszmanScore = 0;
 
   try {
-    console.log(`🥧 Processing chunk with Pied Piper middle-out algorithm...`);
+    // console.log(`🥧 Processing chunk with Pied Piper middle-out algorithm...`);
     const ppResult = await compressWithPiedPiper(chunk, compressionLevel);
     if (ppResult.compressedData.length < originalSize) {
       compressedData = ppResult.compressedData;
       algorithm = 1;
       weiszmanScore = ppResult.weiszmanScore;
-      console.log(`🥧 Pied Piper success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
+      // console.log(`🥧 Pied Piper success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
     } else {
-      console.log(`🥧 Pied Piper not beneficial (${ppResult.compressedData.length} > ${originalSize}), trying ZSTD...`);
+      // console.log(`🥧 Pied Piper not beneficial (${ppResult.compressedData.length} > ${originalSize}), trying ZSTD...`);
       const zstdData = await compressWithZstdFallback(chunk);
       if (zstdData.length < originalSize) {
         compressedData = zstdData;
         algorithm = 2;
         weiszmanScore = ppResult.weiszmanScore; // Reuse or calculate new, but for simplicity
-        console.log(`🥧 ZSTD success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
+        // console.log(`🥧 ZSTD success: ${((originalSize - compressedData.length) / originalSize * 100).toFixed(1)}% savings`);
       } else {
-        console.log(`🥧 ZSTD not beneficial (${zstdData.length} > ${originalSize}), using original`);
+        // console.log(`🥧 ZSTD not beneficial (${zstdData.length} > ${originalSize}), using original`);
         compressedData = chunk;
         algorithm = 0;
         weiszmanScore = 0;
@@ -607,13 +607,13 @@ export async function decompressFileChunk(compressedChunk: Uint8Array): Promise<
     let decompressedData: Uint8Array;
 
     if (algorithm === 1) {
-      console.log(`🥧 Decompressing Pied Piper chunk (Weiszman Score: ${weiszmanScore.toFixed(2)})...`);
+      // console.log(`🥧 Decompressing Pied Piper chunk (Weiszman Score: ${weiszmanScore.toFixed(2)})...`);
       decompressedData = await decompressWithPiedPiper(data);
     } else if (algorithm === 2) {
-      console.log(`🥧 Decompressing ZSTD chunk...`);
+      // console.log(`🥧 Decompressing ZSTD chunk...`);
       decompressedData = await decompressWithZstdFallback(data);
     } else if (algorithm === 0) {
-      console.log(`🥧 No compression, returning original chunk...`);
+      // console.log(`🥧 No compression, returning original chunk...`);
       decompressedData = data;
     } else {
       throw new Error(`Unknown compression algorithm: ${algorithm}`);
@@ -722,7 +722,7 @@ export async function detectNetworkQuality(): Promise<{ bandwidth: number; laten
     const size = text.length;
     const bandwidth = size / (latency / 1000);
 
-    console.log(`🥧 Network Quality Detection: ${bandwidth.toFixed(0)} bytes/s, ${latency.toFixed(0)}ms latency`);
+    // console.log(`🥧 Network Quality Detection: ${bandwidth.toFixed(0)} bytes/s, ${latency.toFixed(0)}ms latency`);
 
     return {
       bandwidth,
@@ -740,7 +740,7 @@ export async function optimizeTransferSettings(options: SendOptions): Promise<Se
   const networkQuality = await detectNetworkQuality();
   const optimized = { ...options };
 
-  console.log(`🥧 Optimizing Pied Piper settings for network conditions...`);
+  // console.log(`🥧 Optimizing Pied Piper settings for network conditions...`);
 
   // Pied Piper works better with larger chunks due to pattern recognition
   if (networkQuality.bandwidth < 50 * 1024) {
@@ -764,14 +764,14 @@ export async function optimizeTransferSettings(options: SendOptions): Promise<Se
   // For high latency networks, Pied Piper's efficiency compensates
   if (networkQuality.latency > 500) {
     optimized.compressionLevel = Math.max(optimized.compressionLevel, 18);
-    console.log(`🥧 High latency detected, increasing Pied Piper compression to level ${optimized.compressionLevel}`);
+    // console.log(`🥧 High latency detected, increasing Pied Piper compression to level ${optimized.compressionLevel}`);
   }
 
   if (networkQuality.latency > 300) {
     optimized.parallelChunks = Math.max(2, optimized.parallelChunks);
   }
 
-  console.log(`🥧 Pied Piper optimized settings: ${optimized.chunkSize/1024}KB chunks, ${optimized.parallelChunks} parallel, level ${optimized.compressionLevel}`);
+  //console.log(`🥧 Pied Piper optimized settings: ${optimized.chunkSize/1024}KB chunks, ${optimized.parallelChunks} parallel, level ${optimized.compressionLevel}`);
 
   return optimized;
 }
@@ -781,7 +781,7 @@ export async function createReliableDataChannel(peerConnection: RTCPeerConnectio
   let retries = 0;
   while (retries < maxRetries) {
     try {
-      console.log(`🥧 Creating Pied Piper data channel: ${label} (attempt ${retries + 1}/${maxRetries})`);
+      // console.log(`🥧 Creating Pied Piper data channel: ${label} (attempt ${retries + 1}/${maxRetries})`);
       
       const dataChannel = peerConnection.createDataChannel(label, { 
         ordered: true, 
@@ -793,7 +793,7 @@ export async function createReliableDataChannel(peerConnection: RTCPeerConnectio
         const timeout = setTimeout(() => reject(new Error('Data channel timeout')), 5000);
         dataChannel.onopen = () => { 
           clearTimeout(timeout); 
-          console.log(`🥧 Pied Piper data channel ${label} opened successfully`);
+          // console.log(`🥧 Pied Piper data channel ${label} opened successfully`);
           resolve(); 
         };
         dataChannel.onerror = (error) => { 
@@ -825,11 +825,11 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
   let totalWeiszmanScore = 0;
   let chunkCount = 0;
 
-  console.log(`🥧 Pied Piper: Starting file transfer`);
-  console.log(`   📁 File: ${file.name}`);
-  console.log(`   📏 Size: ${fileSize.toLocaleString()} bytes`);
-  console.log(`   🎛️ Compression level: ${options.compressionLevel}`);
-  console.log(`   📦 Chunk size: ${(options.chunkSize / 1024).toFixed(0)}KB`);
+  // console.log(`🥧 Pied Piper: Starting file transfer`);
+  // console.log(`   📁 File: ${file.name}`);
+  // console.log(`   📏 Size: ${fileSize.toLocaleString()} bytes`);
+  // console.log(`   🎛️ Compression level: ${options.compressionLevel}`);
+  // console.log(`   📦 Chunk size: ${(options.chunkSize / 1024).toFixed(0)}KB`);
 
   dataChannel.onopen = async () => {
     const startTime = performance.now();
@@ -854,7 +854,7 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
     metadataHeader[3] = metadataBytes.length & 0xFF;
     metadataHeader.set(metadataBytes, 4);
     
-    console.log(`🥧 Sending file metadata (${metadataBytes.length} bytes)`);
+    // console.log(`🥧 Sending file metadata (${metadataBytes.length} bytes)`);
     dataChannel.send(metadataHeader);
     
     // Wait a moment for metadata to be processed
@@ -886,7 +886,7 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
       if (chunkCount % 10 === 0) { // Log every 10 chunks to see what's happening
         const currentCompressionRatio = ((fileSize - totalCompressedSize) / Math.min(offset, fileSize)) * 100;
         const avgWeiszmanScore = totalWeiszmanScore / chunkCount;
-        console.log(`🥧 Progress: ${progress.toFixed(1)}% | Compression: ${currentCompressionRatio.toFixed(1)}% | Avg Weiszman: ${avgWeiszmanScore.toFixed(2)}`);
+        //console.log(`🥧 Progress: ${progress.toFixed(1)}% | Compression: ${currentCompressionRatio.toFixed(1)}% | Avg Weiszman: ${avgWeiszmanScore.toFixed(2)}`);
       }
       
       // Add small delay to prevent overwhelming the network for parallel chunks with lossless data transfer
@@ -900,14 +900,14 @@ export async function sendFile(file: File, peerConnection: RTCPeerConnection) {
     const compressionRatio = ((fileSize - totalCompressedSize) / fileSize) * 100;
     const avgWeiszmanScore = totalWeiszmanScore / chunkCount;
     
-    console.log(`🥧 Pied Piper Transfer Complete!`);
-    console.log(`   ⏱️ Time: ${transferTime.toFixed(2)}s`);
-    console.log(`   📊 Original size: ${fileSize.toLocaleString()} bytes`);
-    console.log(`   📦 Compressed size: ${totalCompressedSize.toLocaleString()} bytes`);
-    console.log(`   📈 Total compression: ${compressionRatio.toFixed(1)}%`);
-    console.log(`   🏆 Average Weiszman Score: ${avgWeiszmanScore.toFixed(2)}`);
-    console.log(`   📡 Transfer rate: ${(fileSize / 1024 / transferTime).toFixed(0)} KB/s`);
-    console.log(`   🚀 Effective rate: ${(totalCompressedSize / 1024 / transferTime).toFixed(0)} KB/s (after compression)`);
+    // console.log(`🥧 Pied Piper Transfer Complete!`);
+    // console.log(`   ⏱️ Time: ${transferTime.toFixed(2)}s`);
+    // console.log(`   📊 Original size: ${fileSize.toLocaleString()} bytes`);
+    // console.log(`   📦 Compressed size: ${totalCompressedSize.toLocaleString()} bytes`);
+    // console.log(`   📈 Total compression: ${compressionRatio.toFixed(1)}%`);
+    // console.log(`   🏆 Average Weiszman Score: ${avgWeiszmanScore.toFixed(2)}`);
+    // console.log(`   📡 Transfer rate: ${(fileSize / 1024 / transferTime).toFixed(0)} KB/s`);
+    // console.log(`   🚀 Effective rate: ${(totalCompressedSize / 1024 / transferTime).toFixed(0)} KB/s (after compression)`);
     
     // Send end-of-file marker
     const eofMarker = new Uint8Array([0xEF, 0xEF, 0xEF, 0xEF]);
@@ -1063,7 +1063,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
       initializeDecompressionWorker();
     }
 
-    console.log(`🥧 Pied Piper: Starting file reception...`);
+    // console.log(`🥧 Pied Piper: Starting file reception...`);
 
     dataChannel.onmessage = async (event) => {
       try {
@@ -1077,7 +1077,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
             metadataSize = (receivedData[0] << 24) | (receivedData[1] << 16) | 
                           (receivedData[2] << 8) | receivedData[3];
             
-            console.log(`🥧 Expecting metadata of ${metadataSize} bytes`);
+            // console.log(`🥧 Expecting metadata of ${metadataSize} bytes`);
             
             // If we have the complete metadata in this chunk
             if (receivedData.length >= 4 + metadataSize) {
@@ -1085,7 +1085,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
               const metadataStr = new TextDecoder().decode(metadataBytes);
               fileMetadata = JSON.parse(metadataStr);
               
-              console.log(`🥧 Received file metadata:`, fileMetadata);
+              // console.log(`🥧 Received file metadata:`, fileMetadata);
               expectingMetadata = false;
               
               // Process any remaining data in this chunk as file data
@@ -1110,7 +1110,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
               const metadataStr = new TextDecoder().decode(metadataBytes);
               fileMetadata = JSON.parse(metadataStr);
               
-              console.log(`🥧 Received file metadata:`, fileMetadata);
+              // console.log(`🥧 Received file metadata:`, fileMetadata);
               expectingMetadata = false;
               
               // Process any remaining data as file data
@@ -1127,7 +1127,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
         if (receivedData.length === 4 && 
             receivedData[0] === 0xEF && receivedData[1] === 0xEF && 
             receivedData[2] === 0xEF && receivedData[3] === 0xEF) {
-          console.log(`🥧 End-of-file marker received`);
+          // console.log(`🥧 End-of-file marker received`);
           finishReceiving();
           return;
         }
@@ -1172,7 +1172,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
             const progress = (totalDecompressed / fileMetadata.fileSize) * 100;
             if (chunkCount % 10 === 0) {
               const avgWeiszmanScore = totalWeiszmanScore / chunkCount;
-              console.log(`🥧 Receive progress: ${progress.toFixed(1)}% | Avg Weiszman: ${avgWeiszmanScore.toFixed(2)}`);
+              // console.log(`🥧 Receive progress: ${progress.toFixed(1)}% | Avg Weiszman: ${avgWeiszmanScore.toFixed(2)}`);
             }
           }
         }
@@ -1200,13 +1200,13 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
           transferTime
         };
         
-        console.log(`🥧 Pied Piper Reception Complete!`);
-        console.log(`   ⏱️ Time: ${transferTime.toFixed(2)}s`);
-        console.log(`   📤 Received: ${totalReceived.toLocaleString()} bytes`);
-        console.log(`   📁 Decompressed: ${totalDecompressed.toLocaleString()} bytes`);
-        console.log(`   📈 Compression savings: ${compressionRatio.toFixed(1)}%`);
-        console.log(`   🏆 Average Weiszman Score: ${avgWeiszmanScore.toFixed(2)}`);
-        console.log(`   📡 Receive rate: ${(totalReceived / 1024 / transferTime).toFixed(0)} KB/s`);
+        // console.log(`🥧 Pied Piper Reception Complete!`);
+        // console.log(`   ⏱️ Time: ${transferTime.toFixed(2)}s`);
+        // console.log(`   📤 Received: ${totalReceived.toLocaleString()} bytes`);
+        // console.log(`   📁 Decompressed: ${totalDecompressed.toLocaleString()} bytes`);
+        // console.log(`   📈 Compression savings: ${compressionRatio.toFixed(1)}%`);
+        // console.log(`   🏆 Average Weiszman Score: ${avgWeiszmanScore.toFixed(2)}`);
+        // console.log(`   📡 Receive rate: ${(totalReceived / 1024 / transferTime).toFixed(0)} KB/s`);
         
         resolve({
           data: result,
@@ -1219,7 +1219,7 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
     }
 
     dataChannel.onclose = () => {
-      console.log(`🥧 Data channel closed, finalizing reception...`);
+      // console.log(`🥧 Data channel closed, finalizing reception...`);
       finishReceiving();
     };
 
@@ -1234,12 +1234,12 @@ export async function receiveFile(dataChannel: RTCDataChannel, expectedSize?: nu
 export { PiedPiperCompressionEngine, MiddleOutDictionary, PIED_PIPER_CONFIG };
 
 // Richard Hendricks would be proud! 🥧
-console.log(`🥧 Pied Piper Middle-Out Compression Algorithm loaded successfully!`);
-console.log(`   🚀 Ready to revolutionize data compression with middle-out technology`);
-console.log(`   🏆 Theoretical Weiszman Score: ${PIED_PIPER_CONFIG.weiszmanScore}`);
-console.log(`   📐 Golden Ratio Optimization: ${PIED_PIPER_CONFIG.middleOutRatio}`);
-console.log(`   🔄 Max Recursion Depth: ${PIED_PIPER_CONFIG.recursionDepth}`);
-console.log(`   🎯 This is not magic, this is mathematics!`);
+// console.log(`🥧 Pied Piper Middle-Out Compression Algorithm loaded successfully!`);
+// console.log(`   🚀 Ready to revolutionize data compression with middle-out technology`);
+// console.log(`   🏆 Theoretical Weiszman Score: ${PIED_PIPER_CONFIG.weiszmanScore}`);
+// console.log(`   📐 Golden Ratio Optimization: ${PIED_PIPER_CONFIG.middleOutRatio}`);
+// console.log(`   🔄 Max Recursion Depth: ${PIED_PIPER_CONFIG.recursionDepth}`);
+// console.log(`   🎯 This is not magic, this is mathematics!`);
 
 export default {
   compressWithPiedPiper,

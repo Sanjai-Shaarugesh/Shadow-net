@@ -100,9 +100,9 @@ export async function throttledSend(
 
         // Log progress for large files
         if (fileSize > 100 * 1024 * 1024 && sentChunks % 10 === 0) {
-          console.log(
-            `Sent ${sentChunks}/${chunks} chunks (${Math.round((currentPosition * 100) / fileSize)}%)`
-          );
+          // console.log(
+          //   `Sent ${sentChunks}/${chunks} chunks (${Math.round((currentPosition * 100) / fileSize)}%)`
+          // );
         }
 
         currentPosition = end;
@@ -178,7 +178,7 @@ export async function measureNetworkAndOptimizeChunkSize(
 
     // Calculate throughput in MB/s
     const throughput = 1 / (duration / 1000);
-    console.log(`Network throughput: ${throughput.toFixed(2)} MB/s`);
+    // console.log(`Network throughput: ${throughput.toFixed(2)} MB/s`);
 
     // Adjust chunk size based on throughput
     if (throughput > 50) {
@@ -189,7 +189,7 @@ export async function measureNetworkAndOptimizeChunkSize(
       optimizedChunkSize = Math.max(1 * 1024 * 1024, optimizedChunkSize / 2);
     }
 
-    console.log(`Optimized chunk size: ${optimizedChunkSize / (1024 * 1024)}MB`);
+    // console.log(`Optimized chunk size: ${optimizedChunkSize / (1024 * 1024)}MB`);
   } catch (error) {
     console.warn('Error measuring network speed, using default chunk size', error);
   }

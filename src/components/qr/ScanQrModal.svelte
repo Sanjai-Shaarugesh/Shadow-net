@@ -199,7 +199,7 @@
       }
     }
 
-    console.log(`Camera deduplication: ${cameras.length} → ${unique.length}`, { isSamsungDevice, isCapacitor });
+    // console.log(`Camera deduplication: ${cameras.length} → ${unique.length}`, { isSamsungDevice, isCapacitor });
     return unique;
   }
 
@@ -353,24 +353,24 @@
       await detectLinuxEnvironment();
     }
 
-    console.log('Enhanced Platform Detection:', {
-      platform: newPlatform,
-      deviceType: newDeviceType,
-      operatingSystem: newOperatingSystem,
-      isSamsungDevice: newIsSamsungDevice,
-      isOneUI: newIsOneUI,
-      samsungCameraWorkaround: newSamsungCameraWorkaround,
-      androidVersion: newAndroidVersion,
-      chromeVersion: newChromeVersion,
-      isCapacitor: newIsCapacitor,
-      isWebView: newIsWebView,
-      isMobileSafari: newIsMobileSafari,
-      linuxDistro,
-      desktopEnvironment,
-      waylandSession,
-      screenDimensions: newScreenDimensions,
-      pixelRatio: newPixelRatio
-    });
+    // console.log('Enhanced Platform Detection:', {
+    //   platform: newPlatform,
+    //   deviceType: newDeviceType,
+    //   operatingSystem: newOperatingSystem,
+    //   isSamsungDevice: newIsSamsungDevice,
+    //   isOneUI: newIsOneUI,
+    //   samsungCameraWorkaround: newSamsungCameraWorkaround,
+    //   androidVersion: newAndroidVersion,
+    //   chromeVersion: newChromeVersion,
+    //   isCapacitor: newIsCapacitor,
+    //   isWebView: newIsWebView,
+    //   isMobileSafari: newIsMobileSafari,
+    //   linuxDistro,
+    //   desktopEnvironment,
+    //   waylandSession,
+    //   screenDimensions: newScreenDimensions,
+    //   pixelRatio: newPixelRatio
+    // });
   }
 
   async function detectLinuxPackageType(): Promise<typeof platform> {
@@ -647,11 +647,11 @@
 
       if (isSamsungDevice || isCapacitor || deviceType === 'mobile') {
         const uniqueCameras = filterUniqueCameras(newAvailableCameras);
-        console.log(`Camera filtering - Original: ${newAvailableCameras.length}, Unique: ${uniqueCameras.length}`, {
-          isSamsungDevice,
-          samsungCameraWorkaround,
-          isOneUI
-        });
+        // console.log(`Camera filtering - Original: ${newAvailableCameras.length}, Unique: ${uniqueCameras.length}`, {
+        //   isSamsungDevice,
+        //   samsungCameraWorkaround,
+        //   isOneUI
+        // });
 
         // Update available cameras list to only include unique ones
         availableCameras = newAvailableCameras.filter(camera =>
@@ -666,14 +666,14 @@
         await checkFlashlightSupport();
       }
 
-      console.log('Camera system setup complete:', {
-        totalCameras: availableCameras.length,
-        currentIndex: currentCameraIndex,
-        isSamsungDevice,
-        samsungCameraWorkaround,
-        isCapacitor,
-        preferredCamera: getPreferredCamera()
-      });
+      // console.log('Camera system setup complete:', {
+      //   totalCameras: availableCameras.length,
+      //   currentIndex: currentCameraIndex,
+      //   isSamsungDevice,
+      //   samsungCameraWorkaround,
+      //   isCapacitor,
+      //   preferredCamera: getPreferredCamera()
+      // });
 
     } catch (error) {
       console.warn('Camera system setup failed:', error);
@@ -1219,11 +1219,11 @@
   }
 
   function setupContinuousScanning() {
-    console.log(`Continuous scanning enabled for ${platform} on ${deviceType}`, {
-      isSamsungDevice,
-      samsungCameraWorkaround,
-      isCapacitor
-    });
+    // console.log(`Continuous scanning enabled for ${platform} on ${deviceType}`, {
+    //   isSamsungDevice,
+    //   samsungCameraWorkaround,
+    //   isCapacitor
+    // });
   }
 
   function handleScannerError(err: any) {
@@ -1241,7 +1241,7 @@
     if (isRetryableError && isModalOpen && scanMode === 'camera') {
       setTimeout(() => {
         if (isModalOpen && !isCameraActive && scanMode === 'camera') {
-          console.log('Auto-retrying scanner...');
+          // console.log('Auto-retrying scanner...');
           startScanner();
         }
       }, getRetryDelay());

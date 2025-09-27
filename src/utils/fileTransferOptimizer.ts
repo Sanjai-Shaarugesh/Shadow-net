@@ -28,7 +28,7 @@ export class AggressiveCompressor {
     // Third pass: Delta encoding for similar data patterns
     compressed = await this.deltaCompress(compressed);
     
-    console.log(`Compression ratio: ${((1 - compressed.byteLength / data.byteLength) * 100).toFixed(2)}%`);
+    // console.log(`Compression ratio: ${((1 - compressed.byteLength / data.byteLength) * 100).toFixed(2)}%`);
     return compressed;
   }
   
@@ -235,7 +235,7 @@ export class ParallelChannelManager {
     }
     
     await Promise.allSettled(promises);
-    console.log(`Created ${this.channels.filter(c => c.readyState === 'open').length} parallel channels`);
+    // console.log(`Created ${this.channels.filter(c => c.readyState === 'open').length} parallel channels`);
   }
   
   private createUltraOptimizedChannel(label: string, fileSize: number): RTCDataChannel {
@@ -317,7 +317,7 @@ export class UltraAggressiveFileTransfer {
     const startTime = performance.now();
     const fileSize = file.byteLength;
     
-    console.log(`Starting ultra-aggressive transfer of ${(fileSize / (1024**3)).toFixed(2)}GB file`);
+    // console.log(`Starting ultra-aggressive transfer of ${(fileSize / (1024**3)).toFixed(2)}GB file`);
     
     // Step 1: Create parallel channels
     await this.channelManager.createParallelChannels(fileSize);
@@ -327,7 +327,7 @@ export class UltraAggressiveFileTransfer {
     const targetThroughput = fileSize / (targetTime / 1000); // bytes per second
     const chunkSize = Math.min(128 * 1024 * 1024, targetThroughput / 100); // 100 chunks per second
     
-    console.log(`Target: ${(targetThroughput / (1024**3)).toFixed(2)}GB/s, Chunk size: ${(chunkSize / (1024**2)).toFixed(2)}MB`);
+    // console.log(`Target: ${(targetThroughput / (1024**3)).toFixed(2)}GB/s, Chunk size: ${(chunkSize / (1024**2)).toFixed(2)}MB`);
     
     // Step 3: Parallel compression and sending
     const chunks = Math.ceil(fileSize / chunkSize);
@@ -366,9 +366,9 @@ export class UltraAggressiveFileTransfer {
     const totalTime = performance.now() - startTime;
     const actualThroughput = (totalCompressedSize / (totalTime / 1000)) / (1024**3);
     
-    console.log(`Transfer completed in ${(totalTime / 1000).toFixed(2)}s`);
-    console.log(`Actual throughput: ${actualThroughput.toFixed(2)} GB/s`);
-    console.log(`Compression ratio: ${((1 - totalCompressedSize / fileSize) * 100).toFixed(2)}%`);
+    // console.log(`Transfer completed in ${(totalTime / 1000).toFixed(2)}s`);
+    // console.log(`Actual throughput: ${actualThroughput.toFixed(2)} GB/s`);
+    // console.log(`Compression ratio: ${((1 - totalCompressedSize / fileSize) * 100).toFixed(2)}%`);
   }
   
   private async processAndSendChunk(
