@@ -1,0 +1,12 @@
+{
+  "name": "webrtc-signaling",
+  "version": "1.0.0",
+  "main": "signaling-server.ts",
+  "scripts": {
+    "start": "bun run signaling-server.ts"
+  },
+  "dependencies": {
+    "elysia": "^1.4.9",
+    "ws": "^8.14.2"
+  }
+}

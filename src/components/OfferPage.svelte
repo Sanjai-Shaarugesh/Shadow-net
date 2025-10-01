@@ -1,126 +1,77 @@
 <script lang="ts">
   import { addToastMessage } from '../stores/toastStore';
-  import { defaultSendOptions, githubLink, waitIceCandidatesTimeout } from '../configs';
+  import { defaultSendOptions, waitIceCandidatesTimeout } from '../configs';
   import Eye from '../components/icons/Eye.svelte';
   import { Message } from '../proto/message';
   import Collapse from '../components/layout/Collapse.svelte';
   import OfferOptions from '../components/OfferOptions.svelte';
   import {
-    Asterisk,
     Cog,
     ChevronsLeftRightEllipsis,
     Clipboard,
-    LandPlot,
     Send,
     HeartHandshake,
-    FilePlus
+    Key
   } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
-  import { Capacitor } from '@capacitor/core';
+  import SignalingService from '../utils/signaling';
 
   import {
     exportRsaPublicKeyToBase64,
     generateRsaKeyPair,
     importRsaPublicKeyFromBase64
   } from '../utils/crypto';
-  import { sdpDecode, sdpEncode } from '../utils/sdpEncode';
-  import { generateUniqueCode, parseUniqueCode } from '../utils/uniqueCode';
   import type { SendOptions } from '../type';
   import Sender from '../components/sender/Sender.svelte';
   import Receiver from '../components/receiver/Receiver.svelte';
-  import QrModal from '../components/qr/QrModal.svelte';
-  import ScanQrModal from '../components/qr/ScanQrModal.svelte';
   import Toast from '../components/Toast.svelte';
-  import { navigate } from '../stores/navigationStore';
 
-  // options
+  let signalingService = SignalingService.getInstance();
+
   let sendOptions = $state(defaultSendOptions);
-  let rsa: CryptoKeyPair | undefined = $state(undefined); // private key
-  let rsaPub: CryptoKey | undefined = $state(undefined); // public key from other peer
+  let rsa: CryptoKeyPair | undefined = $state(undefined);
+  let rsaPub: CryptoKey | undefined = $state(undefined);
 
-  let showPassword = $state(false); // State to control password visibility
-  // Value to bind with the input
+  let connectionPIN = $state('');
+  let showPIN = $state(false);
 
-  // webRTC
   let connection: RTCPeerConnection | undefined = $state(undefined);
   let dataChannel: RTCDataChannel | undefined = $state(undefined);
   let isConnecting = $state(false);
   let generating = $state(false);
-  let offerCode = $state('');
-  let showOfferCode = $state(false);
-  let answerCode = $state('');
 
-  // components
   let receiver: Receiver | undefined = $state(undefined);
   let sender: Sender | undefined = $state(undefined);
   let sendMode = $state(true);
   let showNewFile = $state(false);
   let showOfferOptions = $state(false);
-  let qrModal: QrModal | undefined = $state(undefined);
 
-  // Debug logging functions
-  function logWebRTCState() {
-    if (!connection) {
-      console.error('WebRTC Connection: Not initialized');
-      return;
-    }
+  let cleanupListener: (() => void) | undefined = $state(undefined);
 
-    // console.log('WebRTC Connection Details:', {
-    //   signalingState: connection.signalingState,
-    //   iceConnectionState: connection.iceConnectionState,
-    //   connectionState: connection.connectionState,
-    //   hasLocalDescription: !!connection.localDescription,
-    //   hasRemoteDescription: !!connection.remoteDescription
-    // });
-  }
-
-  function debugAcceptAnswer() {
-    // console.log('Debug Accept Answer:', {
-    //   answerCode,
-    //   sendOptions,
-    //   isEncrypting: sendOptions.isEncrypt,
-    //   connectionExists: !!connection
-    // });
-
-    logWebRTCState();
-  }
-
-  async function createOfferCode(offer: RTCSessionDescription) {
-    let publicKeyBase64 = '';
-    if (sendOptions.isEncrypt) {
-      rsa = await generateRsaKeyPair();
-      publicKeyBase64 = await exportRsaPublicKeyToBase64(rsa.publicKey);
-    }
-
-    const sdp = sdpEncode(offer.sdp);
-    offerCode = generateUniqueCode(sdp, {
-      iceServer:
-        defaultSendOptions.iceServer === sendOptions.iceServer ? undefined : sendOptions.iceServer,
-      chunkSize:
-        defaultSendOptions.chunkSize === sendOptions.chunkSize ? undefined : sendOptions.chunkSize,
-      publicKey: publicKeyBase64
-    });
-  }
-
-  async function createPeerAndDataCannel() {
+  async function createPeerAndDataChannel() {
+    console.log('🔧 Creating peer connection and data channel...');
     connection = new RTCPeerConnection({
       iceServers: [{ urls: sendOptions.iceServer }],
       bundlePolicy: 'balanced',
       iceCandidatePoolSize: 4
     });
 
-    connection.onicecandidateerror = () => {
+    connection.onicecandidateerror = (err) => {
+      console.error('❌ ICE Candidate error:', err);
       addToastMessage('ICE Candidate error', 'error');
     };
 
     dataChannel = connection.createDataChannel('data', {
-      ordered: false // we handle the order by response status
+      ordered: false
     });
+
     dataChannel.onopen = () => {
-      addToastMessage('Connected', 'success');
+      console.log('✅ Data channel opened!');
+      addToastMessage('Connected successfully!', 'success');
       isConnecting = true;
-      qrModal?.close();
+      generating = false;
     };
+
     dataChannel.onmessage = (event) => {
       const message = Message.decode(new Uint8Array(event.data));
 
@@ -133,122 +84,129 @@
         sender.onReceiveEvent(message.id, message.receiveEvent);
       }
     };
-    dataChannel.onerror = () => {
-      addToastMessage('WebRTC error', 'error');
+
+    dataChannel.onerror = (err) => {
+      console.error('❌ Data channel error:', err);
+      addToastMessage('Connection error', 'error');
       isConnecting = false;
-      offerCode = '';
+      connectionPIN = '';
     };
+
     dataChannel.onclose = () => {
+      console.log('🔌 Data channel closed');
       addToastMessage('Disconnected', 'error');
       isConnecting = false;
-      offerCode = '';
+      connectionPIN = '';
     };
+
+    console.log('✅ Peer connection and data channel created');
   }
 
-  async function generateOfferCode() {
+  async function generateConnectionPIN() {
+    console.log('🚀 Starting PIN generation...');
     generating = true;
-    await createPeerAndDataCannel();
-
-    if (!connection) {
-      addToastMessage('Failed to create WebRTC connection', 'error');
-      generating = false;
-      return;
-    }
-
-    connection.onicecandidate = async (event) => {
-      if (!event.candidate && connection!.localDescription) {
-        await createOfferCode(connection!.localDescription);
-        generating = false;
-      }
-    };
-
+    
     try {
+      await createPeerAndDataChannel();
+
+      if (!connection) {
+        throw new Error('Failed to create connection');
+      }
+
+      connectionPIN = signalingService.generatePIN();
+      console.log('🔑 PIN generated:', connectionPIN);
+
+      let publicKeyBase64 = '';
+      if (sendOptions.isEncrypt) {
+        console.log('🔐 Generating encryption keys...');
+        rsa = await generateRsaKeyPair();
+        publicKeyBase64 = await exportRsaPublicKeyToBase64(rsa.publicKey);
+      }
+
+      // Set up answer listener BEFORE creating offer
+      console.log('👂 Setting up answer listener for PIN:', connectionPIN);
+      cleanupListener = signalingService.listenForAnswer(connectionPIN, async (answer) => {
+        console.log('📨 Received answer for PIN:', connectionPIN);
+        
+        try {
+          if (sendOptions.isEncrypt && answer.publicKey) {
+            console.log('🔐 Importing receiver public key...');
+            rsaPub = await importRsaPublicKeyFromBase64(answer.publicKey);
+          }
+
+          const remoteDesc: RTCSessionDescriptionInit = {
+            type: 'answer',
+            sdp: answer.sdp
+          };
+
+          console.log('🔗 Setting remote description...');
+          await connection!.setRemoteDescription(remoteDesc);
+          console.log('✅ Remote description set, connection establishing...');
+          addToastMessage('Answer received, connecting...', 'success');
+        } catch (error) {
+          console.error('❌ Error processing answer:', error);
+          addToastMessage('Error processing answer', 'error');
+        }
+      });
+
+      // Create and send offer
+      connection.onicecandidate = async (event) => {
+        if (!event.candidate && connection!.localDescription) {
+          console.log('📤 All ICE candidates gathered, sending offer...');
+          
+          await signalingService.sendOffer(connectionPIN, connection!.localDescription.sdp, {
+            publicKey: publicKeyBase64,
+            iceServer: sendOptions.iceServer !== defaultSendOptions.iceServer ? sendOptions.iceServer : undefined,
+            chunkSize: sendOptions.chunkSize !== defaultSendOptions.chunkSize ? sendOptions.chunkSize : undefined
+          });
+
+          generating = false;
+          addToastMessage('PIN ready! Share with receiver', 'success');
+        } else if (event.candidate) {
+          console.log('🧊 ICE candidate:', event.candidate.candidate.substring(0, 50) + '...');
+        }
+      };
+
+      console.log('🔨 Creating offer...');
       const offer = await connection.createOffer({
         offerToReceiveVideo: false,
         offerToReceiveAudio: false
       });
+      
+      console.log('✍️ Setting local description...');
       await connection.setLocalDescription(offer);
+      console.log('✅ Local description set');
 
-      // stop waiting for ice candidates if longer than timeout
+      // Timeout for ICE gathering
       setTimeout(async () => {
         if (!connection?.localDescription || !generating) return;
-        addToastMessage('timeout waiting ICE candidates');
-        await createOfferCode(connection.localDescription);
+        
+        console.log('⏰ ICE gathering timeout, sending offer anyway...');
+        addToastMessage('Sending offer (timeout)...', 'info');
+
+        await signalingService.sendOffer(connectionPIN, connection.localDescription.sdp, {
+          publicKey: publicKeyBase64,
+          iceServer: sendOptions.iceServer !== defaultSendOptions.iceServer ? sendOptions.iceServer : undefined,
+          chunkSize: sendOptions.chunkSize !== defaultSendOptions.chunkSize ? sendOptions.chunkSize : undefined
+        });
+
         generating = false;
       }, waitIceCandidatesTimeout);
+
     } catch (error) {
-      console.error('Error generating offer:', error);
+      console.error('❌ Error generating offer:', error);
       addToastMessage('Failed to generate offer', 'error');
       generating = false;
     }
   }
 
-  async function copyOfferCode() {
+  async function copyPIN() {
     try {
-      await navigator.clipboard.writeText(offerCode);
-      addToastMessage('Copied to clipboard', 'info');
+      await navigator.clipboard.writeText(connectionPIN);
+      addToastMessage('PIN copied!', 'info');
     } catch (error) {
-      console.error('Failed to copy offer code:', error);
-      addToastMessage('Failed to copy offer code', 'error');
-    }
-  }
-
-  async function acceptAnswer() {
-    // Debugging log
-    debugAcceptAnswer();
-
-    if (!answerCode.trim()) {
-      addToastMessage('Please enter an answer code', 'error');
-      return;
-    }
-
-    try {
-      // Validate the answer code structure first
-      let parsedCode;
-      try {
-        parsedCode = parseUniqueCode(answerCode);
-      } catch (parseError) {
-        addToastMessage('Invalid answer code format', 'error');
-        console.error('Parse error:', parseError);
-        return;
-      }
-
-      const { sdp, publicKey } = parsedCode;
-
-      // Ensure we have a valid connection before setting remote description
-      if (!connection) {
-        addToastMessage('WebRTC connection not established', 'error');
-        return;
-      }
-
-      // Handle encryption key if needed
-      if (sendOptions.isEncrypt && publicKey) {
-        try {
-          rsaPub = await importRsaPublicKeyFromBase64(publicKey);
-        } catch (cryptoError) {
-          addToastMessage('Failed to import public key', 'error');
-          console.error('Crypto import error:', cryptoError);
-          return;
-        }
-      }
-
-      // Decode and set remote description
-      const remoteDesc: RTCSessionDescriptionInit = {
-        type: 'answer',
-        sdp: sdpDecode(sdp, false)
-      };
-
-      // Add error handling for setRemoteDescription
-      try {
-        await connection.setRemoteDescription(remoteDesc);
-        addToastMessage('Answer code accepted', 'success');
-      } catch (setDescError) {
-        addToastMessage('Failed to set remote description', 'error');
-        console.error('Set remote description error:', setDescError);
-      }
-    } catch (error) {
-      addToastMessage('Unexpected error processing answer code', 'error');
-      console.error('Unexpected error:', error);
+      console.error('Failed to copy:', error);
+      addToastMessage('Failed to copy PIN', 'error');
     }
   }
 
@@ -260,93 +218,67 @@
     window.location.href = `${window.location.origin}/answer.html`;
   }
 
-  const isMobile = Capacitor.isNativePlatform();
-  let gPressed = false;
-
   onMount(() => {
+    console.log('📄 Offer page mounted');
+    
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() == 'o') {
         event.preventDefault();
-        generateOfferCode();
-      } else if (isMobile) {
-        if (event.key == 'Enter') {
-          event.preventDefault();
-          acceptAnswer();
-        }
-      } else if (event.ctrlKey && event.key.toLowerCase() == 'a') {
-        event.preventDefault();
-        acceptAnswer();
-      } else if (event.key.toLowerCase() == 'g') {
-        gPressed = true;
-      } else if (gPressed && event.key.toLowerCase() == 'a') {
-        event.preventDefault();
-        window.location.href = '/answer.html';
-        //gPressed = false ;
-      } else if (event.altKey && event.key == 's') {
-        event.preventDefault();
-        showOfferOptions = true;
-        // showOfferOptions.update(v => !v);
+        generateConnectionPIN();
       } else if (event.ctrlKey && event.key.toLowerCase() == 'c') {
         event.preventDefault();
-        copyOfferCode();
-      } else if (event.ctrlKey && event.key.toLowerCase() === 'v') {
-        event.preventDefault();
-        navigator.clipboard
-          .readText()
-          .then((text) => {
-            answerCode = text;
-          })
-          .catch((error) => {
-            console.error('Failed to read clipboard contents: ', error);
-          });
-      } else {
-        gPressed = false;
+        copyPIN();
       }
     };
 
     window.addEventListener('keydown', handleShortcut);
 
-    onDestroy(() => {
+    return () => {
       window.removeEventListener('keydown', handleShortcut);
-    });
+      if (cleanupListener) {
+        cleanupListener();
+      }
+    };
+  });
+
+  onDestroy(() => {
+    console.log('🧹 Offer page cleanup');
+    if (cleanupListener) {
+      cleanupListener();
+    }
   });
 </script>
 
 <div class="container mx-auto p-4 max-w-3xl">
   <h1 class="text-2xl font-bold mb-4">File Transfer - Offer Page</h1>
 
-  <Collapse title="1. Generate Offer" isOpen={!offerCode}>
+  <Collapse title="1. Generate Connection PIN" isOpen={!connectionPIN}>
     {#if generating}
       <div class="flex flex-col items-center justify-center gap-2">
         <span class="loading loading-spinner loading-lg"></span>
-        <div>Generating Offer</div>
+        <div>Generating Connection PIN...</div>
       </div>
     {:else}
-      <p>
-        Generate a unique offer code to establish a connection. See
-        <a
-          class="link"
-          href={'https://speed-share-web.vercel.app/' + '#how-does-it-work'}
-          target="_blank"
-          rel="noopener noreferrer">How does it work?</a
-        >
+      <p class="mb-4">
+        Generate a 6-digit PIN to establish a secure connection. Share this PIN with your peer.
       </p>
       <div class="mt-4">
         {#if showOfferOptions}
           <OfferOptions onUpdate={onOptionsUpdate} />
         {/if}
-        <div class="">
-          <button class="btn btn-soft btn-secondary" onclick={generateOfferCode}
-            >Generate Offer Code <Asterisk /></button
-          >
+        <div class="flex gap-2 flex-wrap">
+          <button class="btn btn-soft btn-secondary" onclick={generateConnectionPIN}>
+            Generate PIN <Key />
+          </button>
 
           {#if !showOfferOptions}
             <button
               class="btn btn-secondary"
               onclick={() => {
                 showOfferOptions = true;
-              }}>Settings <Cog /></button
-            >
+              }}>
+              Settings <Cog />
+            </button>
           {/if}
           <button class="btn btn-dash btn-warning" onclick={navigateToAnswerPage}>
             Go to Answer Page <ChevronsLeftRightEllipsis />
@@ -356,125 +288,38 @@
     {/if}
   </Collapse>
 
-  <Collapse title="2. Accept Answer" isOpen={offerCode !== '' && !isConnecting}>
-    {#if offerCode}
-      <p class="">
-        Share this unique offer code with your peer. They will need to enter it on the Answer page.
+  <Collapse title="2. Share Connection PIN" isOpen={connectionPIN !== '' && !isConnecting}>
+    {#if connectionPIN}
+      <p class="mb-4">
+        Share this 6-digit PIN with your peer. They will need to enter it on the Answer page to connect.
       </p>
-      <div class="mt-2 relative">
-        <input
-          type={showOfferCode ? 'text' : 'password'}
-          class="input input-bordered w-full pr-12"
-          value={offerCode}
-          readonly
-        />
-
-        <!-- Eye icon -->
-        <div class="absolute top-1/2 transform -translate-y-1/2 right-2 p-1">
-          <Eye
-            onChange={(show) => {
-              showOfferCode = show;
-            }}
-          />
+      
+      <div class="flex justify-center mb-6">
+        <div class="stats shadow bg-primary text-primary-content">
+          <div class="stat place-items-center">
+            <div class="stat-title text-primary-content/70">Connection PIN</div>
+            <div class="stat-value text-5xl font-mono tracking-wider">
+              {showPIN ? connectionPIN : '••••••'}
+            </div>
+            <div class="stat-desc text-primary-content/70">Share with receiver</div>
+          </div>
         </div>
       </div>
 
-      <div class="mt-4 flex gap-2">
-        <button class="btn btn-dash btn-success" onclick={copyOfferCode}
-          >Copy Code <Clipboard /> </button
-        >
-
-
-
-        <QrModal bind:this={qrModal} qrData={offerCode} title="Offer QR Code" />
+      <div class="flex gap-2 justify-center flex-wrap">
+        <button class="btn btn-soft btn-success" onclick={copyPIN}>
+          Copy PIN <Clipboard />
+        </button>
+        <button class="btn btn-ghost" onclick={() => (showPIN = !showPIN)}>
+          {showPIN ? 'Hide' : 'Show'} PIN
+        </button>
       </div>
-      <p class="mt-4">Enter the Answer Code from your peer to establish connection.</p>
-      <div class="relative mt-4">
-        <!-- Toggle the input type based on the showPassword state -->
-        <input
-          class="input input-bordered w-full"
-          type={showPassword ? 'text' : 'password'}
-          bind:value={answerCode}
-        />
 
-        <!-- Inline SVG for the eye icon to toggle visibility -->
-        {#if showPassword}
-          <button
-            type="button"
-            class="absolute top-1/2 transform -translate-y-1/2 right-2 p-1"
-            onclick={() => (showPassword = !showPassword)}
-            aria-label="Toggle password visibility"
-            onkeydown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                showPassword = !showPassword;
-              }
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              class="h-6 w-6 cursor-pointer"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 12c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"
-              />
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M2.458 12C3.732 7.724 7.732 5 12 5c4.268 0 8.268 2.724 9.542 7-1.274 4.276-5.274 7-9.542 7-4.268 0-8.268-2.724-9.542-7z"
-              />
-            </svg>
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="absolute top-1/2 transform -translate-y-1/2 right-2 p-1"
-            onclick={() => (showPassword = !showPassword)}
-            aria-label="Toggle password visibility"
-            onkeydown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                showPassword = !showPassword;
-              }
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-eye-off-icon lucide-eye-off"
-              ><path
-                d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
-              /><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /><path
-                d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
-              /><path d="m2 2 20 20" /></svg
-            >
-          </button>
-        {/if}
-      </div>
-      <div class="mt-4 flex gap-2">
-        <button class="btn btn-soft btn-warning" onclick={acceptAnswer}
-          >Accept Answer <LandPlot /></button
-        >
-        <ScanQrModal
-          onScanSuccess={(data) => {
-            answerCode = data;
-            acceptAnswer();
-          }}
-        />
+      <div class="alert alert-info mt-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Waiting for receiver to connect with this PIN...</span>
       </div>
     {/if}
   </Collapse>
@@ -483,18 +328,16 @@
     {#if dataChannel}
       <div class="flex w-full mb-4 mt-2 justify-center">
         <div class="join w-full">
-          <!-- Send Button -->
           <button
-            class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem] inline-flex items-center justify-center gap-x-2"
+            class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem]"
             onclick={() => {
               sendMode = true;
             }}
           >
             <Send />
-            <span class="btm-nav-label">Send</span>
+            <span>Send</span>
           </button>
 
-          <!-- Receive Button with Badge -->
           <div class="relative w-1/2">
             <span
               class="indicator-item badge badge-success text-xs animate-bounce absolute"
@@ -504,16 +347,14 @@
               New files
             </span>
             <button
-              class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem] inline-flex items-center justify-center gap-x-2"
-              class:btn-ghost={sendMode}
-              class:btn-primary={!sendMode}
+              class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem]"
               onclick={() => {
                 showNewFile = false;
                 sendMode = false;
               }}
             >
               <HeartHandshake />
-              <span class="btm-nav-label">Receive</span>
+              <span>Receive</span>
             </button>
           </div>
         </div>
