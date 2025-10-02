@@ -1,5 +1,6 @@
 // signaling.ts - WebRTC Signaling Service (Complete Fixed Version)
 
+
 interface SignalingMessage {
   type: 'offer' | 'answer';
   sdp: string;
@@ -14,7 +15,7 @@ interface SignalingMessage {
 // Local network: 'ws://192.168.1.X:8080' (replace X with your server IP)
 // Internet: 'wss://your-domain.com'
 // Same browser testing: '' (empty string for BroadcastChannel)
-const SIGNALING_SERVER_URL = 'ws://localhost:8080/ws';
+const SIGNALING_SERVER_URL = import.meta.env.PUBLIC_SIGNALING_SERVER_URL || '';
 
 class SignalingService {
   private static instance: SignalingService;

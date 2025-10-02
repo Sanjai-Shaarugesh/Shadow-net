@@ -1,20 +1,42 @@
 // signaling-server.ts - WebRTC Signaling Server with Elysia.js & Bun
-// Complete working version for cross-network connections
-// 
-// Installation:
-// bun add elysia
-//
-// Run:
-// bun run signaling-server.ts
-//
-// For cross-network access, ensure:
-// 1. Port 8080 is open in firewall
-// 2. Run on machine with known IP address
-// 3. Update client code with server IP
-
 import { Elysia } from 'elysia';
+import * as os from 'os';
 
 const PORT = process.env.PORT || 8080;
+
+// Function to get local IP address
+function getLocalIPAddress(): string {
+  const interfaces = os.networkInterfaces();
+  
+  for (const name of Object.keys(interfaces)) {
+    const nets = interfaces[name];
+    if (!nets) continue;
+    
+    for (const net of nets) {
+      // Skip over non-IPv4 and internal addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        // Prefer 192.168.x.x or 10.x.x.x
+        if (net.address.startsWith('192.168.') || net.address.startsWith('10.')) {
+          return net.address;
+        }
+      }
+    }
+  }
+  
+  // Fallback: return any IPv4
+  for (const name of Object.keys(interfaces)) {
+    const nets = interfaces[name];
+    if (!nets) continue;
+    
+    for (const net of nets) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  
+  return 'localhost';
+}
 
 // Store active PIN connections
 interface PinConnection {
@@ -34,7 +56,6 @@ const cleanupInterval = setInterval(() => {
   let cleanedCount = 0;
   
   for (const [pin, data] of pinConnections.entries()) {
-    // Remove PINs older than 10 minutes
     if (now - data.timestamp > 10 * 60 * 1000) {
       pinConnections.delete(pin);
       cleanedCount++;
@@ -47,28 +68,32 @@ const cleanupInterval = setInterval(() => {
 }, 60 * 1000);
 
 const app = new Elysia()
-  // HTTP status endpoint with CORS
   .get('/', ({ set }) => {
     set.headers['Access-Control-Allow-Origin'] = '*';
     set.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
     set.headers['Access-Control-Allow-Headers'] = 'Content-Type';
+    
+    const localIP = getLocalIPAddress();
     
     return {
       status: 'running',
       service: 'WebRTC Signaling Server',
       version: '2.0.0',
       activePins: pinConnections.size,
-      connectedClients: connectedClients.size
+      connectedClients: connectedClients.size,
+      endpoints: {
+        local: `ws://localhost:${PORT}/ws`,
+        network: `ws://${localIP}:${PORT}/ws`,
+        http: `http://${localIP}:${PORT}`
+      }
     };
   })
   
-  // WebSocket endpoint
   .ws('/ws', {
     open(ws) {
       clientCounter++;
       const clientId = clientCounter;
       
-      // Store client metadata in ws.data
       ws.data.clientId = clientId;
       ws.data.isAlive = true;
       
@@ -77,7 +102,6 @@ const app = new Elysia()
       console.log(`[${clientId}] Client connected`);
       console.log(`[INFO] Total clients: ${connectedClients.size}`);
       
-      // Send welcome message
       try {
         ws.send(JSON.stringify({ 
           status: 'connected', 
@@ -96,7 +120,6 @@ const app = new Elysia()
         const msg = typeof message === 'string' ? JSON.parse(message) : message;
         const { type, pin } = msg;
 
-        // Handle request_offer - receiver asking for stored offer
         if (type === 'request_offer') {
           if (!pin || !/^\d{6}$/.test(pin)) {
             ws.send(JSON.stringify({ 
@@ -121,7 +144,6 @@ const app = new Elysia()
           return;
         }
 
-        // Validate PIN format for offer/answer
         if (!pin || !/^\d{6}$/.test(pin)) {
           ws.send(JSON.stringify({ 
             error: 'Invalid PIN format. Must be 6 digits.',
@@ -131,9 +153,7 @@ const app = new Elysia()
           return;
         }
 
-        // Handle offer from sender
         if (type === 'offer') {
-          // Check if PIN already exists
           if (pinConnections.has(pin)) {
             ws.send(JSON.stringify({ 
               error: 'PIN already in use. Please generate a new PIN.',
@@ -143,7 +163,6 @@ const app = new Elysia()
             return;
           }
 
-          // Store the offer
           pinConnections.set(pin, {
             offer: msg,
             offerSocket: ws,
@@ -159,7 +178,6 @@ const app = new Elysia()
           
           console.log(`[${clientId}] Stored offer for PIN: ${pin}`);
           
-          // Notify any waiting receivers
           connectedClients.forEach((client) => {
             if (client !== ws) {
               try {
@@ -173,7 +191,6 @@ const app = new Elysia()
             }
           });
         } 
-        // Handle answer from receiver
         else if (type === 'answer') {
           const connection = pinConnections.get(pin);
           
@@ -196,19 +213,16 @@ const app = new Elysia()
             return;
           }
 
-          // Send answer to the sender
           try {
             connection.offerSocket.send(JSON.stringify(msg));
             console.log(`[${clientId}] Relayed answer for PIN: ${pin} to client [${connection.clientId}]`);
             
-            // Send confirmation to receiver
             ws.send(JSON.stringify({ 
               status: 'answer_sent', 
               pin,
               message: 'Connection established! You can now transfer files.'
             }));
             
-            // Clean up after successful connection
             setTimeout(() => {
               pinConnections.delete(pin);
               console.log(`[${clientId}] Cleaned up PIN: ${pin}`);
@@ -222,7 +236,6 @@ const app = new Elysia()
             }));
           }
         } 
-        // Unknown message type
         else {
           ws.send(JSON.stringify({ 
             error: 'Unknown message type',
@@ -248,7 +261,6 @@ const app = new Elysia()
       console.log(`[${clientId}] Client disconnected`);
       console.log(`[INFO] Total clients: ${connectedClients.size}`);
       
-      // Clean up any PINs associated with this socket
       let cleanedPins = 0;
       for (const [pin, data] of pinConnections.entries()) {
         if (data.offerSocket === ws) {
@@ -265,25 +277,28 @@ const app = new Elysia()
   
   .listen(PORT);
 
+const localIP = getLocalIPAddress();
+
 console.log('===========================================');
 console.log('  WebRTC Signaling Server Started');
 console.log('===========================================');
 console.log(`  Port: ${PORT}`);
-console.log(`  HTTP: http://0.0.0.0:${PORT}`);
-console.log(`  WebSocket: ws://0.0.0.0:${PORT}/ws`);
+console.log(`  Local IP: ${localIP}`);
 console.log('===========================================');
-console.log('  For local network access, use:');
-console.log(`  ws://<your-local-ip>:${PORT}/ws`);
-console.log('  Example: ws://192.168.1.100:8080/ws');
+console.log('  Connection URLs:');
+console.log(`  • Local:   ws://localhost:${PORT}/ws`);
+console.log(`  • Network: ws://${localIP}:${PORT}/ws`);
+console.log(`  • HTTP:    http://${localIP}:${PORT}`);
+console.log('===========================================');
+console.log('  Share the Network URL with other devices');
+console.log('  on the same WiFi/LAN to connect!');
 console.log('===========================================');
 
-// Graceful shutdown
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 function shutdown() {
   console.log('\n[SHUTDOWN] Shutting down gracefully...');
-  
   clearInterval(cleanupInterval);
   
   connectedClients.forEach((client) => {
@@ -299,7 +314,6 @@ function shutdown() {
   });
   
   app.stop();
-  
   console.log('[SHUTDOWN] Server closed');
   process.exit(0);
 }

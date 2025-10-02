@@ -104,6 +104,7 @@
     "cordova-plugin-zip": "^3.1.0",
     "crypto-js": "^4.2.0",
     "cryptr": "^6.3.0",
+    "dotenv": "^17.2.3",
     "electron-forge": "^5.2.4",
     "fflate": "^0.8.2",
     "filepond": "^4.32.8",

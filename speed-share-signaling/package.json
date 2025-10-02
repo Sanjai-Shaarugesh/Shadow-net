@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "signaling-server.ts",
   "scripts": {
-    "start": "bun run signaling-server.ts"
+    "start": "bun run signaling-server.ts",
+    "prod": "PORT=8080 bun run signaling-server.ts"
   },
   "dependencies": {
     "elysia": "^1.4.9",
