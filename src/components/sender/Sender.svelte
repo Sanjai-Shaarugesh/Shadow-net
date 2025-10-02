@@ -305,8 +305,9 @@
   
   <!-- Chat History Section -->
   {#if chatHistory.length > 0}
-    <div class="flex-grow min-h-0 overflow-hidden rounded-xl shadow-inner bg-base-200/70">
-      <div class="h-full overflow-y-auto p-4 space-y-3" id="chat-history">
+    <div class="flex flex-col flex-grow min-h-0 rounded-xl shadow-inner bg-base-200/70">
+      <!-- Scrollable chat container with modern scrollbar -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-primary scrollbar-track-base-200/50" id="chat-history">
         {#each chatHistory as chat}
           <div class="chat transition-opacity duration-300" 
                class:chat-end={chat.type === 'sent'} 
@@ -322,15 +323,16 @@
           </div>
         {/each}
       </div>
-    </div>
-    
-    <!-- Clear Chat Button (when chat history exists) -->
-    <div class="flex justify-center">
-      <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
-        Clear Chat History
-      </button>
+  
+      <!-- Clear Chat Button -->
+      <div class="flex justify-center p-2 border-t border-base-300">
+        <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
+          Clear Chat History
+        </button>
+      </div>
     </div>
   {:else}
+
     <!-- Empty State -->
     <div class="flex-grow flex items-center justify-center rounded-xl shadow-inner bg-base-200/70">
       <p class="text-center text-sm text-base-content/60 italic p-6 rounded-lg bg-base-300/50">
@@ -373,3 +375,5 @@
     {/if}
   </div>
 </div>
+
+

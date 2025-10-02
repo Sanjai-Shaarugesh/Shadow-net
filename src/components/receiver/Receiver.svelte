@@ -340,11 +340,14 @@
   
   <!-- Chat History Section -->
   {#if chatHistory.length > 0}
-    <div class="flex-grow min-h-0 overflow-hidden rounded-xl shadow-inner bg-base-200/70">
-      <div class="h-full overflow-y-auto p-4 space-y-3" id="chat-history">
-        <h3 class="font-bold text-sm mb-3 text-base-content/80 sticky top-0 bg-base-200/90 backdrop-blur-sm py-2 -mx-4 px-4 border-b border-base-content/10">
+    <div class="flex flex-col flex-grow min-h-0 rounded-xl shadow-inner bg-base-200/70">
+      <!-- Scrollable chat container -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-3" id="chat-history">
+        <!-- Sticky header -->
+        <h3 class="font-bold text-sm mb-3 text-base-content/80 sticky top-0 bg-base-200/90 backdrop-blur-sm py-2 -mx-4 px-4 border-b border-base-content/10 z-10">
           Real-time Chat
         </h3>
+  
         {#each chatHistory as chat (chat.timestamp)}
           <div class="chat chat-start transition-opacity duration-300">
             <div class="chat-bubble chat-bubble-info break-words max-w-xs md:max-w-md lg:max-w-lg">
@@ -356,13 +359,13 @@
           </div>
         {/each}
       </div>
-    </div>
-    
-    <!-- Clear Chat Button (when chat history exists) -->
-    <div class="flex justify-center">
-      <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
-        Clear Chat History
-      </button>
+  
+      <!-- Clear Chat Button -->
+      <div class="flex justify-center p-2 border-t border-base-300">
+        <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
+          Clear Chat History
+        </button>
+      </div>
     </div>
   {:else}
     <!-- Empty Chat State -->
@@ -391,7 +394,7 @@
     <div class="flex-shrink-0 rounded-xl shadow-inner bg-base-200/70 h-24">
       <div class="h-full flex items-center justify-center p-4">
         <p class="text-center text-sm text-base-content/60 italic">
-          Connected, waiting for files... ðŸ“
+          Connected, waiting for files... 📡“
         </p>
       </div>
     </div>
