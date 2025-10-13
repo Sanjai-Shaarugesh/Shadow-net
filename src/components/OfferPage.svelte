@@ -11,11 +11,15 @@
     Clipboard,
     Send,
     HeartHandshake,
-    Key
+    Key,
+    // NEW Media Icons
+    Video,
+    Mic,
+    VideoOff,
+    MicOff
   } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import SignalingService from '../utils/signaling';
-
   import {
     exportRsaPublicKeyToBase64,
     generateRsaKeyPair,
@@ -48,8 +52,77 @@
 
   let cleanupListener: (() => void) | undefined = $state(undefined);
 
+  // --- START VIDEO/VOICE CALL STATE AND FUNCTIONS ---
+  let localStream: MediaStream | undefined = $state(undefined);
+  let remoteStream: MediaStream | undefined = $state(undefined);
+  let isVideoOn = $state(false);
+  let isAudioOn = $state(false);
+
+  // Video element references for manual srcObject assignment
+  let localVideoEl: HTMLVideoElement | undefined = $state(undefined);
+  let remoteVideoEl: HTMLVideoElement | undefined = $state(undefined);
+
+  // Correctly set srcObject whenever localStream or remoteStream changes
+  $effect(() => {
+    if (localVideoEl && localStream) {
+      localVideoEl.srcObject = localStream;
+    }
+  });
+
+  $effect(() => {
+    if (remoteVideoEl && remoteStream) {
+      remoteVideoEl.srcObject = remoteStream;
+    }
+  });
+
+  async function startLocalMedia() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStream = stream;
+      isVideoOn = stream.getVideoTracks().some(t => t.enabled);
+      isAudioOn = stream.getAudioTracks().some(t => t.enabled);
+      addToastMessage('Local media started', 'success');
+      return stream;
+    } catch (error) {
+      console.error('❌ Failed to get local media:', error);
+      addToastMessage('Failed to get camera/mic access. Media channel will be audio/video disabled.', 'warning');
+      return undefined;
+    }
+  }
+
+  function toggleVideo() {
+    if (localStream) {
+      const tracks = localStream.getVideoTracks();
+      if (tracks.length > 0) {
+        tracks.forEach(track => {
+          track.enabled = !track.enabled;
+        });
+        isVideoOn = tracks[0].enabled;
+        addToastMessage(`Video ${isVideoOn ? 'on' : 'off'}`, isVideoOn ? 'info' : 'warning');
+      }
+    }
+  }
+
+  function toggleAudio() {
+    if (localStream) {
+      const tracks = localStream.getAudioTracks();
+      if (tracks.length > 0) {
+        tracks.forEach(track => {
+          track.enabled = !track.enabled;
+        });
+        isAudioOn = tracks[0].enabled;
+        addToastMessage(`Audio ${isAudioOn ? 'on' : 'off'}`, isAudioOn ? 'info' : 'warning');
+      }
+    }
+  }
+  // --- END VIDEO/VOICE CALL STATE AND FUNCTIONS ---
+
+
   async function createPeerAndDataChannel() {
     console.log('🔧 Creating peer connection and data channel...');
+    // NEW: Request and prepare local media stream
+    const stream = await startLocalMedia();
+
     connection = new RTCPeerConnection({
       iceServers: [{ urls: sendOptions.iceServer }],
       bundlePolicy: 'balanced',
@@ -59,6 +132,21 @@
     connection.onicecandidateerror = (err) => {
       console.error('❌ ICE Candidate error:', err);
       addToastMessage('ICE Candidate error', 'error');
+    };
+
+    // NEW: Add local tracks to peer connection
+    if (stream) {
+      stream.getTracks().forEach(track => connection!.addTrack(track, stream));
+      console.log('✅ Local tracks added to peer connection');
+    }
+
+    // NEW: Handle remote tracks
+    connection.ontrack = (event) => {
+      console.log('🔊 Received remote track:', event.track.kind);
+      // Ensure only one remote stream is set
+      if (!remoteStream && event.streams && event.streams[0]) {
+        remoteStream = event.streams[0];
+      }
     };
 
     dataChannel = connection.createDataChannel('data', {
@@ -97,6 +185,12 @@
       addToastMessage('Disconnected', 'error');
       isConnecting = false;
       connectionPIN = '';
+      // Optional: stop media on disconnect
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = undefined;
+      }
+      remoteStream = undefined;
     };
 
     console.log('✅ Peer connection and data channel created');
@@ -105,7 +199,7 @@
   async function generateConnectionPIN() {
     console.log('🚀 Starting PIN generation...');
     generating = true;
-    
+
     try {
       await createPeerAndDataChannel();
 
@@ -127,7 +221,7 @@
       console.log('👂 Setting up answer listener for PIN:', connectionPIN);
       cleanupListener = signalingService.listenForAnswer(connectionPIN, async (answer) => {
         console.log('📨 Received answer for PIN:', connectionPIN);
-        
+
         try {
           if (sendOptions.isEncrypt && answer.publicKey) {
             console.log('🔐 Importing receiver public key...');
@@ -153,7 +247,7 @@
       connection.onicecandidate = async (event) => {
         if (!event.candidate && connection!.localDescription) {
           console.log('📤 All ICE candidates gathered, sending offer...');
-          
+
           await signalingService.sendOffer(connectionPIN, connection!.localDescription.sdp, {
             publicKey: publicKeyBase64,
             iceServer: sendOptions.iceServer !== defaultSendOptions.iceServer ? sendOptions.iceServer : undefined,
@@ -169,10 +263,11 @@
 
       console.log('🔨 Creating offer...');
       const offer = await connection.createOffer({
-        offerToReceiveVideo: false,
-        offerToReceiveAudio: false
+        // MODIFIED: Request video/audio reception for media stream
+        offerToReceiveVideo: true,
+        offerToReceiveAudio: true
       });
-      
+
       console.log('✍️ Setting local description...');
       await connection.setLocalDescription(offer);
       console.log('✅ Local description set');
@@ -180,7 +275,7 @@
       // Timeout for ICE gathering
       setTimeout(async () => {
         if (!connection?.localDescription || !generating) return;
-        
+
         console.log('⏰ ICE gathering timeout, sending offer anyway...');
         addToastMessage('Sending offer (timeout)...', 'info');
 
@@ -220,7 +315,7 @@
 
   onMount(() => {
     console.log('📄 Offer page mounted');
-    
+
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() == 'o') {
         event.preventDefault();
@@ -246,135 +341,186 @@
     if (cleanupListener) {
       cleanupListener();
     }
+    // NEW: Stop local media tracks
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    // NEW: Close peer connection
+    if (connection) {
+      connection.close();
+    }
   });
 </script>
 
-<div class="container mx-auto p-4 max-w-3xl">
-  <h1 class="text-2xl font-bold mb-4">File Transfer - Offer Page</h1>
+<div class="container mx-auto p-4 sm:p-6 lg:p-8">
+  <div class="flex flex-col lg:flex-row gap-6">
 
-  <Collapse title="1. Generate Connection PIN" isOpen={!connectionPIN}>
-    {#if generating}
-      <div class="flex flex-col items-center justify-center gap-2">
-        <span class="loading loading-spinner loading-lg"></span>
-        <div>Generating Connection PIN...</div>
-      </div>
-    {:else}
-      <p class="mb-4">
-        Generate a 6-digit PIN to establish a secure connection. Share this PIN with your peer.
-      </p>
-      <div class="mt-4">
-        {#if showOfferOptions}
-          <OfferOptions onUpdate={onOptionsUpdate} />
-        {/if}
-        <div class="flex gap-2 flex-wrap">
-          <button class="btn btn-soft btn-secondary" onclick={generateConnectionPIN}>
-            Generate PIN <Key />
-          </button>
+    <div class="lg:w-1/3 space-y-4">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-2xl mb-4 text-primary">
+            <Cog class="w-6 h-6 mr-2" />
+            Connection Setup (Offer)
+          </h2>
 
-          {#if !showOfferOptions}
+          {#if !isConnecting}
             <button
-              class="btn btn-secondary"
-              onclick={() => {
-                showOfferOptions = true;
-              }}>
-              Settings <Cog />
+              class="btn btn-primary btn-lg w-full"
+              onclick={generateConnectionPIN}
+              disabled={generating || connectionPIN.length === 6}
+            >
+              {#if generating}
+                <span class="loading loading-spinner"></span>
+                Generating Offer...
+              {:else}
+                <Key class="w-6 h-6" />
+                Generate Connection PIN
+              {/if}
+            </button>
+            
+            <button class="btn btn-dash btn-warning w-full mt-2" onclick={navigateToAnswerPage}>
+              Go to Answer Page <ChevronsLeftRightEllipsis />
             </button>
           {/if}
-          <button class="btn btn-dash btn-warning" onclick={navigateToAnswerPage}>
-            Go to Answer Page <ChevronsLeftRightEllipsis />
-          </button>
-        </div>
-      </div>
-    {/if}
-  </Collapse>
 
-  <Collapse title="2. Share Connection PIN" isOpen={connectionPIN !== '' && !isConnecting}>
-    {#if connectionPIN}
-      <p class="mb-4">
-        Share this 6-digit PIN with your peer. They will need to enter it on the Answer page to connect.
-      </p>
-      
-      <div class="flex justify-center mb-6">
-        <div class="stats shadow bg-primary text-primary-content">
-          <div class="stat place-items-center">
-            <div class="stat-title text-primary-content/70">Connection PIN</div>
-            <div class="stat-value text-5xl font-mono tracking-wider">
-              {showPIN ? connectionPIN : '••••••'}
+          {#if connectionPIN}
+            <div class="form-control mt-4">
+              <label class="label">
+                <span class="label-text font-semibold">Share this PIN:</span>
+              </label>
+              <div class="input-group">
+                <input
+                  type={showPIN ? 'text' : 'password'}
+                  class="input input-bordered input-lg w-full font-mono text-center text-xl"
+                  value={connectionPIN}
+                  readonly
+                />
+                <button class="btn btn-square btn-lg" onclick={copyPIN}>
+                  <Clipboard class="w-6 h-6" />
+                </button>
+                <button class="btn btn-square btn-lg" onclick={() => (showPIN = !showPIN)}>
+                  <Eye class="w-6 h-6" />
+                </button>
+              </div>
             </div>
-            <div class="stat-desc text-primary-content/70">Share with receiver</div>
-          </div>
+
+            {#if !isConnecting}
+              <div class="alert alert-info mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>Waiting for receiver to connect with this PIN...</span>
+              </div>
+            {/if}
+          {/if}
+
+          <Collapse title="Offer Options" bind:show={showOfferOptions} icon={Cog} class="mt-4">
+            <OfferOptions onUpdate={onOptionsUpdate} />
+          </Collapse>
         </div>
       </div>
+    </div>
 
-      <div class="flex gap-2 justify-center flex-wrap">
-        <button class="btn btn-soft btn-success" onclick={copyPIN}>
-          Copy PIN <Clipboard />
-        </button>
-        <button class="btn btn-ghost" onclick={() => (showPIN = !showPIN)}>
-          {showPIN ? 'Hide' : 'Show'} PIN
-        </button>
-      </div>
+    <div class="lg:w-2/3 space-y-4">
+      <Toast />
 
-      <div class="alert alert-info mt-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span>Waiting for receiver to connect with this PIN...</span>
-      </div>
-    {/if}
-  </Collapse>
+      {#if isConnecting}
+        <div class="card bg-base-100 shadow-xl mb-4 p-4">
+          <h3 class="card-title text-lg">Live Media</h3>
+          <div class="flex flex-col md:flex-row gap-4">
+            <div class="relative w-full md:w-1/2 aspect-video bg-black rounded-lg overflow-hidden">
+              <video bind:this={localVideoEl} autoplay muted class="w-full h-full object-cover rounded-lg" />
+              {#if !localStream}
+                <div class="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-white">Waiting for Local Media...</div>
+              {/if}
+              <span class="badge badge-info absolute top-2 left-2">Local</span>
+            </div>
 
-  <Collapse title="3. Transfer Files" isOpen={isConnecting}>
-    {#if dataChannel}
-      <div class="flex w-full mb-4 mt-2 justify-center">
-        <div class="join w-full">
-          <button
-            class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem]"
-            onclick={() => {
-              sendMode = true;
-            }}
-          >
-            <Send />
-            <span>Send</span>
-          </button>
+            <div class="relative w-full md:w-1/2 aspect-video bg-black rounded-lg overflow-hidden">
+              <video bind:this={remoteVideoEl} autoplay class="w-full h-full object-cover rounded-lg" />
+              {#if !remoteStream}
+                <div class="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-white">Waiting for Remote Stream...</div>
+              {/if}
+              <span class="badge badge-success absolute top-2 left-2">Remote</span>
+            </div>
+          </div>
 
-          <div class="relative w-1/2">
-            <span
-              class="indicator-item badge badge-success text-xs animate-bounce absolute"
-              class:hidden={!showNewFile}
-              style="top: -8px; right: 12px; z-index: 10;"
-            >
-              New files
-            </span>
-            <button
-              class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem]"
-              onclick={() => {
-                showNewFile = false;
-                sendMode = false;
-              }}
-            >
-              <HeartHandshake />
-              <span>Receive</span>
+          <div class="flex justify-center gap-4 mt-4">
+            <button class="btn btn-circle" class:btn-success={isAudioOn} class:btn-error={!isAudioOn} onclick={toggleAudio} disabled={!localStream}>
+              {#if isAudioOn}
+                <Mic class="w-6 h-6" />
+              {:else}
+                <MicOff class="w-6 h-6" />
+              {/if}
+            </button>
+            <button class="btn btn-circle" class:btn-success={isVideoOn} class:btn-error={!isVideoOn} onclick={toggleVideo} disabled={!localStream}>
+              {#if isVideoOn}
+                <Video class="w-6 h-6" />
+              {:else}
+                <VideoOff class="w-6 h-6" />
+              {/if}
             </button>
           </div>
         </div>
-      </div>
+      {/if}
 
-      <div hidden={!sendMode}>
-        <Sender
-          bind:this={sender}
-          {dataChannel}
-          {rsaPub}
-          isEncrypt={sendOptions.isEncrypt}
-          chunkSize={sendOptions.chunkSize}
-        />
-      </div>
+      <div class="collapse collapse-open border border-base-300 bg-base-100 shadow-xl" class:hidden={!isConnecting}>
+        <div class="collapse-title text-xl font-medium flex items-center gap-2">
+          <HeartHandshake class="w-6 h-6" />
+          File Transfer & Chat
+        </div>
+        <div class="collapse-content">
+          {#if dataChannel}
+            <div class="flex w-full mb-4 mt-2 justify-center">
+              <div class="join w-full">
+                <button
+                  class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem]"
+                  onclick={() => {
+                    sendMode = true;
+                  }}
+                >
+                  <Send />
+                  <span>Send</span>
+                </button>
 
-      <div hidden={sendMode}>
-        <Receiver bind:this={receiver} {dataChannel} isEncrypt={sendOptions.isEncrypt} {rsa} />
-      </div>
-    {/if}
-  </Collapse>
+                <div class="relative w-1/2">
+                  <span
+                    class="indicator-item badge badge-success text-xs animate-bounce absolute"
+                    class:hidden={!showNewFile}
+                    style="top: -8px; right: 12px; z-index: 10;"
+                  >
+                    New files
+                  </span>
+                  <button
+                    class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem]"
+                    onclick={() => {
+                      showNewFile = false;
+                      sendMode = false;
+                    }}
+                  >
+                    <HeartHandshake />
+                    <span>Receive</span>
+                  </button>
+                </div>
+              </div>
+            </div>
 
-  <Toast />
+            <div hidden={!sendMode}>
+              <Sender
+                bind:this={sender}
+                {dataChannel}
+                {rsaPub}
+                isEncrypt={sendOptions.isEncrypt}
+                chunkSize={sendOptions.chunkSize}
+              />
+            </div>
+
+            <div hidden={sendMode}>
+              <Receiver bind:this={receiver} {dataChannel} isEncrypt={sendOptions.isEncrypt} {rsa} />
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

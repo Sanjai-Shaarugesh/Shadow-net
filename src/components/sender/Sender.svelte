@@ -303,43 +303,42 @@
 <!-- Replace the existing chat section with this structure -->
 <div class="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-base-100/50 rounded-lg shadow-2xl space-y-4 md:space-y-6">
   
-  <!-- Chat History Section -->
   {#if chatHistory.length > 0}
-    <div class="flex flex-col flex-grow min-h-0 rounded-xl shadow-inner bg-base-200/70">
-      <!-- Scrollable chat container with modern scrollbar -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-primary scrollbar-track-base-200/50" id="chat-history">
-        {#each chatHistory as chat}
-          <div class="chat transition-opacity duration-300" 
-               class:chat-end={chat.type === 'sent'} 
-               class:chat-start={chat.type === 'received'}>
-            <div class="chat-bubble break-words max-w-xs md:max-w-md lg:max-w-lg transition-colors duration-300" 
-                 class:chat-bubble-primary={chat.type === 'sent'} 
-                 class:chat-bubble-info={chat.type === 'received'}>
-              {chat.message}
+      <div class="flex flex-col flex-grow min-h-0 rounded-xl shadow-inner bg-base-200/70">
+        <!-- Scrollable chat container with modern scrollbar -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-primary scrollbar-track-base-200/50" id="chat-history">
+          {#each chatHistory as chat}
+            <div class="chat transition-opacity duration-300" 
+                 class:chat-end={chat.type === 'sent'} 
+                 class:chat-start={chat.type === 'received'}>
+              <div class="chat-bubble break-words max-w-xs md:max-w-md lg:max-w-lg transition-colors duration-300" 
+                   class:chat-bubble-primary={chat.type === 'sent'} 
+                   class:chat-bubble-info={chat.type === 'received'}>
+                {chat.message}
+              </div>
+              <div class="chat-footer opacity-70 text-xs mt-0.5">
+                {formatChatTimestamp(chat.timestamp)}
+              </div>
             </div>
-            <div class="chat-footer opacity-70 text-xs mt-0.5">
-              {formatChatTimestamp(chat.timestamp)}
-            </div>
-          </div>
-        {/each}
+          {/each}
+        </div>
+    
+        <!-- Clear Chat Button -->
+        <div class="flex justify-center p-2 border-t border-base-300">
+          <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
+            Clear Chat History
+          </button>
+        </div>
       </div>
+    {:else}
   
-      <!-- Clear Chat Button -->
-      <div class="flex justify-center p-2 border-t border-base-300">
-        <button class="btn btn-outline btn-warning btn-sm" onclick={() => chatHistory = []}>
-          Clear Chat History
-        </button>
+      <!-- Empty State -->
+      <div class="flex-grow flex items-center justify-center rounded-xl shadow-inner bg-base-200/70">
+        <p class="text-center text-sm text-base-content/60 italic p-6 rounded-lg bg-base-300/50">
+          Start a real-time conversation! ðŸ’¬
+        </p>
       </div>
-    </div>
-  {:else}
-
-    <!-- Empty State -->
-    <div class="flex-grow flex items-center justify-center rounded-xl shadow-inner bg-base-200/70">
-      <p class="text-center text-sm text-base-content/60 italic p-6 rounded-lg bg-base-300/50">
-        Start a real-time conversation! ðŸ’¬
-      </p>
-    </div>
-  {/if}
+    {/if}
 
   <!-- Chat Input Section -->
   <div class="flex items-center gap-2">
@@ -375,5 +374,3 @@
     {/if}
   </div>
 </div>
-
-
