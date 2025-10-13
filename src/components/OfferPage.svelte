@@ -352,175 +352,199 @@
   });
 </script>
 
-<div class="container mx-auto p-4 sm:p-6 lg:p-8">
-  <div class="flex flex-col lg:flex-row gap-6">
+<div class="container mx-auto p-4 max-w-3xl">
+  <h1 class="text-2xl font-bold mb-4">File Transfer - Offer Page</h1>
 
-    <div class="lg:w-1/3 space-y-4">
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-          <h2 class="card-title text-2xl mb-4 text-primary">
-            <Cog class="w-6 h-6 mr-2" />
-            Connection Setup (Offer)
-          </h2>
+  <Collapse title="1. Generate Connection PIN" isOpen={!connectionPIN}>
+    {#if generating}
+      <div class="flex flex-col items-center justify-center gap-2">
+        <span class="loading loading-spinner loading-lg"></span>
+        <div>Generating Connection PIN...</div>
+      </div>
+    {:else}
+      <p class="mb-4">
+        Generate a 6-digit PIN to establish a secure connection. Share this PIN with your peer.
+      </p>
+      <div class="mt-4">
+        {#if showOfferOptions}
+          <OfferOptions onUpdate={onOptionsUpdate} />
+        {/if}
+        <div class="flex gap-2 flex-wrap">
+          <button class="btn btn-soft btn-secondary" onclick={generateConnectionPIN}>
+            Generate PIN <Key />
+          </button>
 
-          {#if !isConnecting}
+          {#if !showOfferOptions}
             <button
-              class="btn btn-primary btn-lg w-full"
-              onclick={generateConnectionPIN}
-              disabled={generating || connectionPIN.length === 6}
-            >
-              {#if generating}
-                <span class="loading loading-spinner"></span>
-                Generating Offer...
-              {:else}
-                <Key class="w-6 h-6" />
-                Generate Connection PIN
-              {/if}
-            </button>
-            
-            <button class="btn btn-dash btn-warning w-full mt-2" onclick={navigateToAnswerPage}>
-              Go to Answer Page <ChevronsLeftRightEllipsis />
+              class="btn btn-secondary"
+              onclick={() => {
+                showOfferOptions = true;
+              }}>
+              Settings <Cog />
             </button>
           {/if}
-
-          {#if connectionPIN}
-            <div class="form-control mt-4">
-              <label class="label">
-                <span class="label-text font-semibold">Share this PIN:</span>
-              </label>
-              <div class="input-group">
-                <input
-                  type={showPIN ? 'text' : 'password'}
-                  class="input input-bordered input-lg w-full font-mono text-center text-xl"
-                  value={connectionPIN}
-                  readonly
-                />
-                <button class="btn btn-square btn-lg" onclick={copyPIN}>
-                  <Clipboard class="w-6 h-6" />
-                </button>
-                <button class="btn btn-square btn-lg" onclick={() => (showPIN = !showPIN)}>
-                  <Eye class="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
-            {#if !isConnecting}
-              <div class="alert alert-info mt-4">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span>Waiting for receiver to connect with this PIN...</span>
-              </div>
-            {/if}
-          {/if}
-
-          <Collapse title="Offer Options" bind:show={showOfferOptions} icon={Cog} class="mt-4">
-            <OfferOptions onUpdate={onOptionsUpdate} />
-          </Collapse>
+          <button class="btn btn-dash btn-warning" onclick={navigateToAnswerPage}>
+            Go to Answer Page <ChevronsLeftRightEllipsis />
+          </button>
         </div>
       </div>
-    </div>
+    {/if}
+  </Collapse>
 
-    <div class="lg:w-2/3 space-y-4">
-      <Toast />
-
-      {#if isConnecting}
-        <div class="card bg-base-100 shadow-xl mb-4 p-4">
-          <h3 class="card-title text-lg">Live Media</h3>
-          <div class="flex flex-col md:flex-row gap-4">
-            <div class="relative w-full md:w-1/2 aspect-video bg-black rounded-lg overflow-hidden">
-              <video bind:this={localVideoEl} autoplay muted class="w-full h-full object-cover rounded-lg" />
-              {#if !localStream}
-                <div class="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-white">Waiting for Local Media...</div>
-              {/if}
-              <span class="badge badge-info absolute top-2 left-2">Local</span>
+  <Collapse title="2. Share Connection PIN" isOpen={connectionPIN !== '' && !isConnecting}>
+    {#if connectionPIN}
+      <p class="mb-4">
+        Share this 6-digit PIN with your peer. They will need to enter it on the Answer page to connect.
+      </p>
+      
+      <div class="flex justify-center mb-6">
+        <div class="stats shadow bg-primary text-primary-content">
+          <div class="stat place-items-center">
+            <div class="stat-title text-primary-content/70">Connection PIN</div>
+            <div class="stat-value text-5xl font-mono tracking-wider">
+              {showPIN ? connectionPIN : '••••••'}
             </div>
-
-            <div class="relative w-full md:w-1/2 aspect-video bg-black rounded-lg overflow-hidden">
-              <video bind:this={remoteVideoEl} autoplay class="w-full h-full object-cover rounded-lg" />
-              {#if !remoteStream}
-                <div class="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-white">Waiting for Remote Stream...</div>
-              {/if}
-              <span class="badge badge-success absolute top-2 left-2">Remote</span>
-            </div>
+            <div class="stat-desc text-primary-content/70">Share with receiver</div>
           </div>
+        </div>
+      </div>
 
-          <div class="flex justify-center gap-4 mt-4">
-            <button class="btn btn-circle" class:btn-success={isAudioOn} class:btn-error={!isAudioOn} onclick={toggleAudio} disabled={!localStream}>
-              {#if isAudioOn}
-                <Mic class="w-6 h-6" />
-              {:else}
-                <MicOff class="w-6 h-6" />
-              {/if}
-            </button>
-            <button class="btn btn-circle" class:btn-success={isVideoOn} class:btn-error={!isVideoOn} onclick={toggleVideo} disabled={!localStream}>
-              {#if isVideoOn}
-                <Video class="w-6 h-6" />
-              {:else}
-                <VideoOff class="w-6 h-6" />
-              {/if}
+      <div class="flex gap-2 justify-center flex-wrap">
+        <button class="btn btn-soft btn-success" onclick={copyPIN}>
+          Copy PIN <Clipboard />
+        </button>
+        <button class="btn btn-ghost" onclick={() => (showPIN = !showPIN)}>
+          {showPIN ? 'Hide' : 'Show'} PIN
+        </button>
+      </div>
+
+      <div class="alert alert-info mt-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Waiting for receiver to connect with this PIN...</span>
+      </div>
+    {/if}
+  </Collapse>
+
+  <Collapse title="3. Transfer Files" isOpen={isConnecting}>
+    {#if dataChannel}
+      <div class="flex w-full mb-4 mt-2 justify-center">
+        <div class="join w-full">
+          <button
+            class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem]"
+            onclick={() => {
+              sendMode = true;
+            }}
+          >
+            <Send />
+            <span>Send</span>
+          </button>
+
+          <div class="relative w-1/2">
+            <span
+              class="indicator-item badge badge-success text-xs animate-bounce absolute"
+              class:hidden={!showNewFile}
+              style="top: -8px; right: 12px; z-index: 10;"
+            >
+              New files
+            </span>
+            <button
+              class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem]"
+              onclick={() => {
+                showNewFile = false;
+                sendMode = false;
+              }}
+            >
+              <HeartHandshake />
+              <span>Receive</span>
             </button>
           </div>
         </div>
-      {/if}
+      </div>
 
-      <div class="collapse collapse-open border border-base-300 bg-base-100 shadow-xl" class:hidden={!isConnecting}>
-        <div class="collapse-title text-xl font-medium flex items-center gap-2">
-          <HeartHandshake class="w-6 h-6" />
-          File Transfer & Chat
-        </div>
-        <div class="collapse-content">
-          {#if dataChannel}
-            <div class="flex w-full mb-4 mt-2 justify-center">
-              <div class="join w-full">
-                <button
-                  class="btn btn-dash btn-secondary join-item w-1/2 text-xl py-4 min-h-[3.5rem]"
-                  onclick={() => {
-                    sendMode = true;
-                  }}
-                >
-                  <Send />
-                  <span>Send</span>
-                </button>
+      <div hidden={!sendMode}>
+        <Sender
+          bind:this={sender}
+          {dataChannel}
+          {rsaPub}
+          isEncrypt={sendOptions.isEncrypt}
+          chunkSize={sendOptions.chunkSize}
+        />
+      </div>
 
-                <div class="relative w-1/2">
-                  <span
-                    class="indicator-item badge badge-success text-xs animate-bounce absolute"
-                    class:hidden={!showNewFile}
-                    style="top: -8px; right: 12px; z-index: 10;"
-                  >
-                    New files
-                  </span>
-                  <button
-                    class="btn btn-dash btn-warning join-item w-full text-xl py-4 min-h-[3.5rem]"
-                    onclick={() => {
-                      showNewFile = false;
-                      sendMode = false;
-                    }}
-                  >
-                    <HeartHandshake />
-                    <span>Receive</span>
-                  </button>
+      <div hidden={sendMode}>
+        <Receiver bind:this={receiver} {dataChannel} isEncrypt={sendOptions.isEncrypt} {rsa} />
+      </div>
+    {/if}
+  </Collapse>
+
+  <Toast />
+  <div class="lg:col-span-2 space-y-4">
+          
+          {#if isConnecting}
+            <!-- Live Media Card -->
+            <div class="backdrop-blur-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/60 rounded-3xl shadow-xl overflow-hidden p-6">
+              <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <Video class="w-5 h-5 text-blue-500" />
+                Live Media
+              </h3>
+              
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="relative aspect-video rounded-2xl bg-black overflow-hidden shadow-lg">
+                  <video bind:this={localVideoEl} autoplay muted class="w-full h-full object-cover" />
+                  {#if !localStream}
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/80 text-white">
+                      <span class="text-sm">Waiting for local media...</span>
+                    </div>
+                  {/if}
+                  <div class="absolute top-3 left-3 px-3 py-1 rounded-lg bg-blue-500/90 text-white text-xs font-semibold">
+                    Local
+                  </div>
+                </div>
+  
+                <div class="relative aspect-video rounded-2xl bg-black overflow-hidden shadow-lg">
+                  <video bind:this={remoteVideoEl} autoplay class="w-full h-full object-cover" />
+                  {#if !remoteStream}
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/80 text-white">
+                      <span class="text-sm">Waiting for remote stream...</span>
+                    </div>
+                  {/if}
+                  <div class="absolute top-3 left-3 px-3 py-1 rounded-lg bg-green-500/90 text-white text-xs font-semibold">
+                    Remote
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div hidden={!sendMode}>
-              <Sender
-                bind:this={sender}
-                {dataChannel}
-                {rsaPub}
-                isEncrypt={sendOptions.isEncrypt}
-                chunkSize={sendOptions.chunkSize}
-              />
-            </div>
-
-            <div hidden={sendMode}>
-              <Receiver bind:this={receiver} {dataChannel} isEncrypt={sendOptions.isEncrypt} {rsa} />
+  
+              <div class="flex justify-center gap-4">
+                <button
+                  class="p-4 rounded-full transition-all duration-200 {isAudioOn ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg' : 'bg-red-500/20 text-red-600 dark:text-red-400'} disabled:opacity-50"
+                  onclick={toggleAudio}
+                  disabled={!localStream}
+                  title="Toggle audio"
+                >
+                  {#if isAudioOn}
+                    <Mic class="w-6 h-6" />
+                  {:else}
+                    <MicOff class="w-6 h-6" />
+                  {/if}
+                </button>
+                <button
+                  class="p-4 rounded-full transition-all duration-200 {isVideoOn ? 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-lg' : 'bg-red-500/20 text-red-600 dark:text-red-400'} disabled:opacity-50"
+                  onclick={toggleVideo}
+                  disabled={!localStream}
+                  title="Toggle video"
+                >
+                  {#if isVideoOn}
+                    <Video class="w-6 h-6" />
+                  {:else}
+                    <VideoOff class="w-6 h-6" />
+                  {/if}
+                </button>
+              </div>
             </div>
           {/if}
+  
+        
         </div>
-      </div>
-    </div>
-  </div>
 </div>
