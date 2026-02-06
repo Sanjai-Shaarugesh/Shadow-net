@@ -15,7 +15,7 @@
     "protogen": "protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto --ts_proto_out=. ./src/proto/*.proto"
   },
   "devDependencies": {
-    "@astrojs/svelte": "^7.1.0",
+    "@astrojs/svelte": "^7.2.5",
     "@astrojs/tailwind": "^6.0.2",
     "@capacitor/assets": "^3.0.5",
     "@nuintun/qrcode": "^3.4.0",
@@ -26,7 +26,7 @@
     "@types/webtorrent": "^0.110.0",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
-    "astro": "^5.12.4",
+    "astro": "^5.17.1",
     "astrojs-service-worker": "^2.0.0",
     "autoprefixer": "^10.4.21",
     "bits-ui": "0.22.0",
@@ -57,7 +57,7 @@
     "@sveltejs/vite-plugin-svelte": "^4.0.0-next.6"
   },
   "dependencies": {
-    "@astrojs/react": "^4.3.0",
+    "@astrojs/react": "^4.4.2",
     "@astrojs/upgrade": "^0.5.2",
     "@bokuweb/zstd-wasm": "^0.0.27",
     "@capacitor-community/app-icon": "^6.0.0",
