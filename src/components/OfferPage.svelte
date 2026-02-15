@@ -1228,6 +1228,8 @@
     font-size: 1.125rem;
     font-weight: 600;
   }
+  
+  
 
   /* Audio indicator */
   .video-audio-indicator {
