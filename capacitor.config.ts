@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.speed_share.app',
-  appName: 'Speed-share',
+  appName: 'ShadowNet',
   webDir: './build',
   server: {
     androidScheme: 'https',

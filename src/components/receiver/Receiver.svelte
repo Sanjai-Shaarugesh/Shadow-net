@@ -217,7 +217,7 @@
   async function downloadFileMobile(fileName: string, base64Data: string) {
     try {
       // Define download folder path
-      const downloadDir = 'Speed-share';
+      const downloadDir = 'ShadowNet';
       
       // Create directory if it doesn't exist
       try {
@@ -240,7 +240,7 @@
         directory: Directory.Documents
       });
       
-      addToastMessage(`Saved ${fileName} to Documents/Speed-share`, 'success');
+      addToastMessage(`Saved ${fileName} to Documents/ShadowNet`, 'success');
     } catch (error: any) {
       console.error('Filesystem write error:', error);
       addToastMessage(`Error saving file: ${error.message}`, 'error');

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Speed-share</string>
-    <string name="title_activity_main">Speed-share</string>
-    <string name="package_name">com.speed_share.app</string>
-    <string name="custom_url_scheme">com.speed_share.app</string>
+    <string name="app_name">ShadowNet</string>
+    <string name="title_activity_main">ShadowNet</string>
+    <string name="package_name">com.shadownet.app</string>
+    <string name="custom_url_scheme">com.shadownet.app</string>
 </resources>

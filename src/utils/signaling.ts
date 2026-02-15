@@ -15,7 +15,7 @@ interface SignalingMessage {
 // Local network: 'ws://192.168.1.X:8080' (replace X with your server IP)
 // Internet: 'wss://your-domain.com'
 // Same browser testing: '' (empty string for BroadcastChannel)
-const SIGNALING_SERVER_URL = import.meta.env.PUBLIC_SIGNALING_SERVER_URL || '';
+const SIGNALING_SERVER_URL = "wss://websocket-jhdc.onrender.com/ws";
 
 class SignalingService {
   private static instance: SignalingService;

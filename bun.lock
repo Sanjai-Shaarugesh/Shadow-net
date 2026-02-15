@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "speed-share",
+      "name": "shadownet",
       "dependencies": {
         "@astrojs/react": "^4.3.0",
         "@astrojs/upgrade": "^0.5.2",

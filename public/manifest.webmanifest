@@ -1,6 +1,6 @@
 {
-  "name": "speed share",
-  "short_name": "speed share",
+  "name": "shadownet",
+  "short_name": "shadownet",
   "description": "A secure P2P file sharing using WebRTC without a server",
   "start_url": "/",
   "display": "standalone",
