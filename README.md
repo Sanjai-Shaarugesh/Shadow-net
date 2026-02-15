@@ -21,6 +21,8 @@ Speed-share is a modern web application that enables seamless peer-to-peer file 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/refs/heads/master/Emojis/Activities/Sparkles.png" width="25px" alt="Sparkles"> Features
 
 - <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Locked.png" width="20px" alt="Lock"> **End-to-End Encryption** - Toggle encryption on/off for complete privacy
+
+
 - <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Gear.png" width="20px" alt="Gear"> **Customizable STUN Servers** - Configure network traversal settings for optimal connectivity
 - <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Card%20File%20Box.png" width="20px" alt="File Box"> **Adjustable Chunk Size** - Modify file chunk size to optimize for your connection speed
 - <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Control%20Knobs.png" width="20px" alt="Control"> **Recipient Controls** - Recipients can set maximum accepted file size
