@@ -52,13 +52,13 @@ export class OptimizedFileTransfer {
     file: File,
     onProgress?: (percent: number, phase: 'compress' | 'transfer') => void
   ): Promise<void> {
-    console.log(`Starting optimized transfer: ${file.name} (${humanFileSize(file.size)})`);
+    // console.log(`Starting optimized transfer: ${file.name} (${humanFileSize(file.size)})`);
 
     // Step 1: Read file
     const fileData = await file.arrayBuffer();
 
     // Step 2: Compress file
-    console.log('Compressing file with ZPAQ algorithm...');
+    // console.log('Compressing file with ZPAQ algorithm...');
     const startCompress = performance.now();
     
     const compressionResult = await this.compressFile(fileData, (percent) => {
@@ -66,13 +66,13 @@ export class OptimizedFileTransfer {
     });
 
     const compressTime = ((performance.now() - startCompress) / 1000).toFixed(2);
-    console.log(
-      `Compressed in ${compressTime}s: ` +
-      `${humanFileSize(compressionResult.metadata.originalSize)} → ` +
-      `${humanFileSize(compressionResult.metadata.compressedSize)} ` +
-      `(${((compressionResult.metadata.originalSize - compressionResult.metadata.compressedSize) / 
-         compressionResult.metadata.originalSize * 100).toFixed(1)}% reduction)`
-    );
+    // console.log(
+    //   `Compressed in ${compressTime}s: ` +
+    //   `${humanFileSize(compressionResult.metadata.originalSize)} → ` +
+    //   `${humanFileSize(compressionResult.metadata.compressedSize)} ` +
+    //   `(${((compressionResult.metadata.originalSize - compressionResult.metadata.compressedSize) / 
+    //      compressionResult.metadata.originalSize * 100).toFixed(1)}% reduction)`
+    // );
 
     // Step 3: Send metadata
     const metadata = {
@@ -88,7 +88,7 @@ export class OptimizedFileTransfer {
     channel.send(JSON.stringify(metadata));
 
     // Step 4: Send compressed data
-    console.log('Transferring compressed file...');
+    // console.log('Transferring compressed file...');
     const startTransfer = performance.now();
     
     await this.throttledSend(
@@ -104,10 +104,10 @@ export class OptimizedFileTransfer {
     const totalTime = ((performance.now() - startCompress) / 1000).toFixed(2);
     const throughput = (compressionResult.compressed.byteLength / parseFloat(transferTime)) / (1024 * 1024);
 
-    console.log(
-      `Transfer complete in ${transferTime}s (total ${totalTime}s, ` +
-      `${throughput.toFixed(2)} MB/s)`
-    );
+    // console.log(
+    //   `Transfer complete in ${transferTime}s (total ${totalTime}s, ` +
+    //   `${throughput.toFixed(2)} MB/s)`
+    // );
   }
 
   /**
@@ -180,7 +180,7 @@ export class OptimizedFileReceiver {
   async handleMessage(event: MessageEvent): Promise<void> {
     if (typeof event.data === 'string') {
       this.fileMetadata = JSON.parse(event.data);
-      console.log('Received metadata:', this.fileMetadata.fileName);
+      // console.log('Received metadata:', this.fileMetadata.fileName);
       this.receivedChunks = [];
     } else {
       this.receivedChunks.push(event.data);
@@ -199,7 +199,7 @@ export class OptimizedFileReceiver {
   }
 
   private async handleComplete(): Promise<void> {
-    console.log('File reception complete, decompressing...');
+    // console.log('File reception complete, decompressing...');
 
     // Combine chunks
     const total = this.receivedChunks.reduce((s, c) => s + c.byteLength, 0);
@@ -226,7 +226,7 @@ export class OptimizedFileReceiver {
       );
     }
 
-    console.log(`Final file size: ${humanFileSize(finalData.byteLength)}`);
+    // console.log(`Final file size: ${humanFileSize(finalData.byteLength)}`);
 
     // Trigger callback
     if (this.onComplete) {

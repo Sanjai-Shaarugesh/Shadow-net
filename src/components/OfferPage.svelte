@@ -97,7 +97,7 @@
           const { Camera } = await import('@capacitor/camera');
           await Camera.requestPermissions();
         } catch (e) {
-          console.log('Camera permission request failed:', e);
+          // console.log('Camera permission request failed:', e);
         }
       }
 
@@ -200,7 +200,7 @@
         const sender = connection.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(videoTrack);
-          console.log('✅ Video track replaced with new camera');
+          // console.log('✅ Video track replaced with new camera');
         } else {
           connection.addTrack(videoTrack, newStream);
         }
@@ -244,7 +244,7 @@
   }
 
   async function createPeerAndDataChannel() {
-    console.log('🔧 Creating peer connection and data channel...');
+    // console.log('🔧 Creating peer connection and data channel...');
     const stream = await startLocalMedia();
     
     const config: RTCConfiguration = {
@@ -267,15 +267,15 @@
     if (stream) {
       stream.getTracks().forEach(track => {
         connection!.addTrack(track, stream);
-        console.log(`✅ Added ${track.kind} track to peer connection`);
+        // console.log(`✅ Added ${track.kind} track to peer connection`);
       });
     }
 
     connection.ontrack = (event) => {
-      console.log('📊 Received remote track:', event.track.kind);
+      // console.log('📊 Received remote track:', event.track.kind);
       if (event.streams && event.streams[0]) {
         remoteStream = event.streams[0];
-        console.log('✅ Remote stream set');
+        // console.log('✅ Remote stream set');
       }
       
       if (event.track.kind === 'audio' && remoteStream) {
@@ -334,7 +334,7 @@
     };
     
     dataChannel.onclose = () => {
-      console.log('🔌 Data channel closed');
+      // console.log('🔌 Data channel closed');
       addToastMessage('Disconnected', 'error');
       isConnecting = false;
       connectionPIN = '';
@@ -346,11 +346,11 @@
       remoteStream = undefined;
     };
 
-    console.log('✅ Peer connection and data channel created');
+    // console.log('✅ Peer connection and data channel created');
   }
 
   async function generateConnectionPIN() {
-    console.log('🚀 Starting PIN generation...');
+    // console.log('🚀 Starting PIN generation...');
     generating = true;
     try {
       await createPeerAndDataChannel();
@@ -360,7 +360,7 @@
       }
 
       connectionPIN = signalingService.generatePIN();
-      console.log('🔑 PIN generated:', connectionPIN);
+      // console.log('🔑 PIN generated:', connectionPIN);
 
       let publicKeyBase64 = '';
       if (sendOptions.isEncrypt) {
@@ -369,13 +369,13 @@
         publicKeyBase64 = await exportRsaPublicKeyToBase64(rsa.publicKey);
       }
 
-      console.log('👂 Setting up answer listener for PIN:', connectionPIN);
+      // console.log('👂 Setting up answer listener for PIN:', connectionPIN);
       cleanupListener = signalingService.listenForAnswer(connectionPIN, async (answer) => {
-        console.log('📨 Received answer for PIN:', connectionPIN);
+        // console.log('📨 Received answer for PIN:', connectionPIN);
 
         try {
           if (sendOptions.isEncrypt && answer.publicKey) {
-            console.log('🔐 Importing receiver public key...');
+            // console.log('🔐 Importing receiver public key...');
             rsaPub = await importRsaPublicKeyFromBase64(answer.publicKey);
           }
 
@@ -384,9 +384,9 @@
             sdp: answer.sdp
           };
 
-          console.log('🔗 Setting remote description...');
+          // console.log('🔗 Setting remote description...');
           await connection!.setRemoteDescription(remoteDesc);
-          console.log('✅ Remote description set, connection establishing...');
+          // console.log('✅ Remote description set, connection establishing...');
           addToastMessage('Answer received, connecting...', 'success');
         } catch (error) {
           console.error('❌ Error processing answer:', error);
@@ -396,7 +396,7 @@
       
       connection.onicecandidate = async (event) => {
         if (!event.candidate && connection!.localDescription) {
-          console.log('📤 All ICE candidates gathered, sending offer...');
+          // console.log('📤 All ICE candidates gathered, sending offer...');
           await signalingService.sendOffer(connectionPIN, connection!.localDescription.sdp, {
             publicKey: publicKeyBase64,
             iceServer: sendOptions.iceServer !== defaultSendOptions.iceServer ? sendOptions.iceServer : undefined,
@@ -405,23 +405,23 @@
           generating = false;
           addToastMessage('PIN ready! Share with receiver', 'success');
         } else if (event.candidate) {
-          console.log('🧊 ICE candidate:', event.candidate.candidate.substring(0, 50) + '...');
+          // console.log('🧊 ICE candidate:', event.candidate.candidate.substring(0, 50) + '...');
         }
       };
 
-      console.log('📝 Creating offer...');
+      // console.log('📝 Creating offer...');
       const offer = await connection.createOffer({
         offerToReceiveVideo: true,
         offerToReceiveAudio: true
       });
-      console.log('✏️ Setting local description...');
+      // console.log('✏️ Setting local description...');
       await connection.setLocalDescription(offer);
-      console.log('✅ Local description set');
+      // console.log('✅ Local description set');
       
       setTimeout(async () => {
         if (!connection?.localDescription || !generating) return;
 
-        console.log('⏰ ICE gathering timeout, sending offer anyway...');
+        // console.log('⏰ ICE gathering timeout, sending offer anyway...');
         addToastMessage('Sending offer (timeout)...', 'info');
 
         await signalingService.sendOffer(connectionPIN, connection.localDescription.sdp, {
@@ -458,13 +458,13 @@
   }
 
   onMount(() => {
-    console.log('📄 Offer page mounted');
+    // console.log('📄 Offer page mounted');
 
     // Detect Capacitor
     isCapacitor = !!(window as any).Capacitor;
     isAndroid = isCapacitor && (window as any).Capacitor?.getPlatform() === 'android';
 
-    console.log('Platform:', { isCapacitor, isAndroid });
+    // console.log('Platform:', { isCapacitor, isAndroid });
 
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() == 'o') {
@@ -487,7 +487,7 @@
   });
   
   onDestroy(() => {
-    console.log('🧹 Offer page cleanup');
+    // console.log('🧹 Offer page cleanup');
     if (cleanupListener) {
       cleanupListener();
     }

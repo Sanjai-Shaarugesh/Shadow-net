@@ -95,7 +95,7 @@
           const { Camera } = await import('@capacitor/camera');
           await Camera.requestPermissions();
         } catch (e) {
-          console.log('Camera permission request failed:', e);
+          // console.log('Camera permission request failed:', e);
         }
       }
 
@@ -216,7 +216,7 @@
         const sender = connection.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(videoTrack);
-          console.log('✅ Video track replaced with new camera');
+          // console.log('✅ Video track replaced with new camera');
         } else {
           connection.addTrack(videoTrack, newStream);
         }
@@ -270,16 +270,16 @@
           if (stream && connection) {
             stream.getTracks().forEach(track => {
               connection!.addTrack(track, stream);
-              console.log(`✅ Added ${track.kind} track to peer connection`);
+              // console.log(`✅ Added ${track.kind} track to peer connection`);
             });
           }
 
           if (connection) {
             connection.ontrack = (event) => {
-              console.log('Received remote track:', event.track.kind);
+              // console.log('Received remote track:', event.track.kind);
               if (event.streams && event.streams[0]) {
                 remoteStream = event.streams[0];
-                console.log('✅ Remote stream set');
+                // console.log('✅ Remote stream set');
               }
 
               if (event.track.kind === 'audio' && remoteStream) {
@@ -374,7 +374,7 @@
           
           setTimeout(() => {
             if (connection!.iceGatheringState !== 'complete') {
-              console.log('ICE timeout reached, forcing answer send.');
+              // console.log('ICE timeout reached, forcing answer send.');
               connection!.onicecandidate!({ candidate: null } as RTCPeerConnectionIceEvent);
             }
           }, waitIceCandidatesTimeout);
@@ -406,13 +406,13 @@
   }
  
   onMount(() => {
-    console.log('📄 Answer page mounted');
+    // console.log('📄 Answer page mounted');
 
     // Detect Capacitor
     isCapacitor = !!(window as any).Capacitor;
     isAndroid = isCapacitor && (window as any).Capacitor?.getPlatform() === 'android';
 
-    console.log('Platform:', { isCapacitor, isAndroid });
+    // console.log('Platform:', { isCapacitor, isAndroid });
 
     let gPressed = false;
 
@@ -452,7 +452,7 @@
   });
   
   onDestroy(() => {
-    console.log('🧹 Answer page cleanup');
+    // console.log('🧹 Answer page cleanup');
     if (cleanupListener) {
       cleanupListener();
     }

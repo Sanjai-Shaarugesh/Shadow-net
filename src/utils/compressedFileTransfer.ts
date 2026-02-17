@@ -31,14 +31,14 @@ export class CompressedFileTransfer {
     file: File,
     onProgress?: (percent: number, phase: 'compress' | 'transfer') => void
   ): Promise<void> {
-    console.log(`Preparing to send: ${file.name} (${humanFileSize(file.size)})`);
+    // console.log(`Preparing to send: ${file.name} (${humanFileSize(file.size)})`);
 
     // Read file data
     const fileData = await file.arrayBuffer();
     const chunkSize = calculateOptimalChunkSize(file.size);
 
     // Compress file
-    console.log('Compressing file...');
+    // console.log('Compressing file...');
     const compressionResult = await ZPAQCompressor.compress(fileData, (percent) => {
       onProgress?.(percent / 2, 'compress'); // First 50% is compression
     });
@@ -46,11 +46,11 @@ export class CompressedFileTransfer {
     const { compressed, metadata } = compressionResult;
     const compressedBuffer = compressed.buffer;
 
-    console.log(
-      `Compression ${metadata.algorithm}: ${humanFileSize(metadata.originalSize)} → ` +
-      `${humanFileSize(metadata.compressedSize)} ` +
-      `(${((metadata.originalSize - metadata.compressedSize) / metadata.originalSize * 100).toFixed(1)}% reduction)`
-    );
+    // console.log(
+    //   `Compression ${metadata.algorithm}: ${humanFileSize(metadata.originalSize)} → ` +
+    //   `${humanFileSize(metadata.compressedSize)} ` +
+    //   `(${((metadata.originalSize - metadata.compressedSize) / metadata.originalSize * 100).toFixed(1)}% reduction)`
+    // );
 
     // Send metadata first
     const fileMetadata: FileMetadata = {
@@ -67,7 +67,7 @@ export class CompressedFileTransfer {
     console.log('Sent file metadata');
 
     // Send compressed data
-    console.log('Sending compressed file...');
+    // console.log('Sending compressed file...');
     await this.throttledSendWithProgress(
       channel,
       compressedBuffer,
@@ -77,7 +77,7 @@ export class CompressedFileTransfer {
       }
     );
 
-    console.log('File transfer complete!');
+    // console.log('File transfer complete!');
   }
 
   /**
@@ -89,11 +89,11 @@ export class CompressedFileTransfer {
     onProgress?: (percent: number) => void
   ): Promise<ArrayBuffer> {
     if (!metadata.wasCompressed || !metadata.compressionMetadata) {
-      console.log('File was not compressed, returning as-is');
+      // console.log('File was not compressed, returning as-is');
       return data;
     }
 
-    console.log(`Decompressing file: ${humanFileSize(data.byteLength)}`);
+    // console.log(`Decompressing file: ${humanFileSize(data.byteLength)}`);
 
     const decompressed = await ZPAQCompressor.decompress(
       data,
@@ -101,7 +101,7 @@ export class CompressedFileTransfer {
       onProgress
     );
 
-    console.log(`Decompressed to: ${humanFileSize(decompressed.byteLength)}`);
+    // console.log(`Decompressed to: ${humanFileSize(decompressed.byteLength)}`);
 
     return decompressed;
   }
@@ -215,7 +215,7 @@ export class FileReceiver {
     if (typeof event.data === 'string') {
       // Metadata message
       this.fileMetadata = JSON.parse(event.data) as FileMetadata;
-      console.log('Received file metadata:', this.fileMetadata);
+      // console.log('Received file metadata:', this.fileMetadata);
       this.receivedChunks = [];
     } else {
       // Data chunk
@@ -248,7 +248,7 @@ export class FileReceiver {
       offset += chunk.byteLength;
     }
 
-    console.log(`Received complete file: ${humanFileSize(totalSize)}`);
+    // console.log(`Received complete file: ${humanFileSize(totalSize)}`);
 
     // Decompress if needed
     const transfer = new CompressedFileTransfer();
@@ -256,13 +256,13 @@ export class FileReceiver {
       combined.buffer,
       this.fileMetadata,
       (percent) => {
-        console.log(`Decompressing: ${percent}%`);
+        // console.log(`Decompressing: ${percent}%`);
       }
     );
 
     // Download file
     downloadFile(finalData, this.fileMetadata.fileName);
-    console.log('File download started');
+    // console.log('File download started');
 
     // Reset for next file
     this.receivedChunks = [];

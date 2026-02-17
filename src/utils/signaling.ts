@@ -42,7 +42,7 @@ class SignalingService {
       console.log('Attempting WebSocket connection to:', SIGNALING_SERVER_URL);
       this.connectWebSocket();
     } else {
-      console.log('Using BroadcastChannel for same-browser signaling');
+      // console.log('Using BroadcastChannel for same-browser signaling');
       this.initBroadcastChannel();
       this.connectionReadyResolve?.();
     }
@@ -53,16 +53,16 @@ class SignalingService {
     
     this.signalingChannel.onmessage = (event) => {
       const message: SignalingMessage = event.data;
-      console.log('Received via BroadcastChannel:', message.type, 'PIN:', message.pin);
+      // console.log('Received via BroadcastChannel:', message.type, 'PIN:', message.pin);
       
       const handler = this.messageHandlers.get(message.pin);
       if (handler) {
-        console.log('Handler found for PIN:', message.pin);
+        // console.log('Handler found for PIN:', message.pin);
         handler(message);
       }
     };
 
-    console.log('BroadcastChannel initialized');
+    // console.log('BroadcastChannel initialized');
   }
 
   private connectWebSocket() {
@@ -74,7 +74,7 @@ class SignalingService {
       this.websocket = new WebSocket(SIGNALING_SERVER_URL);
 
       this.websocket.onopen = () => {
-        console.log('WebSocket connected to signaling server');
+        // console.log('WebSocket connected to signaling server');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.connectionReadyResolve?.();
@@ -91,7 +91,7 @@ class SignalingService {
           
           // Handle status/error messages
           if (data.status && !data.type) {
-            console.log('Server status:', data.message || data.status);
+            // console.log('Server status:', data.message || data.status);
             return;
           }
 
@@ -102,7 +102,7 @@ class SignalingService {
 
           // Handle offer_available notification
           if (data.type === 'offer_available') {
-            console.log('Offer available for PIN:', data.pin);
+            // console.log('Offer available for PIN:', data.pin);
             const handler = this.messageHandlers.get(data.pin);
             if (handler) {
               // Request the offer
@@ -117,14 +117,14 @@ class SignalingService {
           // Handle offer/answer messages
           const message: SignalingMessage = data;
           if (message.type === 'offer' || message.type === 'answer') {
-            console.log('Received via WebSocket:', message.type, 'PIN:', message.pin);
+            // console.log('Received via WebSocket:', message.type, 'PIN:', message.pin);
             
             const handler = this.messageHandlers.get(message.pin);
             if (handler) {
-              console.log('Handler found for PIN:', message.pin);
+              // console.log('Handler found for PIN:', message.pin);
               handler(message);
             } else {
-              console.log('No handler for PIN:', message.pin);
+              // console.log('No handler for PIN:', message.pin);
             }
           }
         } catch (error) {
@@ -152,14 +152,14 @@ class SignalingService {
           const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
           this.reconnectAttempts++;
           
-          console.log(`Reconnecting in ${delay/1000}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+          // console.log(`Reconnecting in ${delay/1000}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
           
           this.reconnectTimeout = window.setTimeout(() => {
             this.reconnectTimeout = null;
             this.connectWebSocket();
           }, delay);
         } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          console.log('Max reconnection attempts reached, falling back to BroadcastChannel');
+          // console.log('Max reconnection attempts reached, falling back to BroadcastChannel');
           this.initBroadcastChannel();
         }
       };
@@ -179,7 +179,7 @@ class SignalingService {
 
   generatePIN(): string {
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('Generated PIN:', pin);
+    // console.log('Generated PIN:', pin);
     return pin;
   }
 
@@ -193,16 +193,16 @@ class SignalingService {
   }
 
   private async sendMessage(message: SignalingMessage): Promise<void> {
-    console.log('Sending message:', message.type, 'PIN:', message.pin);
+    // console.log('Sending message:', message.type, 'PIN:', message.pin);
     
     await this.waitForConnection();
     
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       this.websocket.send(JSON.stringify(message));
-      console.log('Sent via WebSocket');
+      // console.log('Sent via WebSocket');
     } else if (this.signalingChannel) {
       this.signalingChannel.postMessage(message);
-      console.log('Sent via BroadcastChannel');
+      // console.log('Sent via BroadcastChannel');
     } else {
       console.error('No signaling method available');
       throw new Error('Signaling unavailable - please check server connection');
@@ -224,7 +224,7 @@ class SignalingService {
       timestamp: Date.now()
     };
 
-    console.log('Sending OFFER for PIN:', pin);
+    // console.log('Sending OFFER for PIN:', pin);
     await this.sendMessage(message);
   }
 
@@ -237,17 +237,17 @@ class SignalingService {
       timestamp: Date.now()
     };
 
-    console.log('Sending ANSWER for PIN:', pin);
+    // console.log('Sending ANSWER for PIN:', pin);
     await this.sendMessage(message);
   }
 
   listenForOffer(pin: string, callback: (offer: SignalingMessage) => void): () => void {
-    console.log('Listening for OFFER on PIN:', pin);
+    // console.log('Listening for OFFER on PIN:', pin);
     
     // Store the handler
     this.messageHandlers.set(pin, (message) => {
       if (message.type === 'offer') {
-        console.log('OFFER received for PIN:', pin);
+        // console.log('OFFER received for PIN:', pin);
         callback(message);
       }
     });
@@ -255,7 +255,7 @@ class SignalingService {
     // If using WebSocket, request the offer after a brief delay
     setTimeout(() => {
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-        console.log('Requesting offer from server for PIN:', pin);
+        // console.log('Requesting offer from server for PIN:', pin);
         this.websocket.send(JSON.stringify({
           type: 'request_offer',
           pin: pin
@@ -264,23 +264,23 @@ class SignalingService {
     }, 500);
 
     return () => {
-      console.log('Stopped listening for PIN:', pin);
+      // console.log('Stopped listening for PIN:', pin);
       this.messageHandlers.delete(pin);
     };
   }
 
   listenForAnswer(pin: string, callback: (answer: SignalingMessage) => void): () => void {
-    console.log('Listening for ANSWER on PIN:', pin);
+    // console.log('Listening for ANSWER on PIN:', pin);
     
     this.messageHandlers.set(pin, (message) => {
       if (message.type === 'answer') {
-        console.log('ANSWER received for PIN:', pin);
+        // console.log('ANSWER received for PIN:', pin);
         callback(message);
       }
     });
 
     return () => {
-      console.log('Stopped listening for PIN:', pin);
+      // console.log('Stopped listening for PIN:', pin);
       this.messageHandlers.delete(pin);
     };
   }
@@ -290,7 +290,7 @@ class SignalingService {
   }
 
   cleanup(): void {
-    console.log('Cleaning up signaling service');
+    // console.log('Cleaning up signaling service');
     this.messageHandlers.clear();
     
     if (this.reconnectTimeout) {

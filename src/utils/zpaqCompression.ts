@@ -92,7 +92,7 @@ export class ZPAQCompressor {
       };
     }
 
-    console.log(`Compressing ${humanFileSize(originalSize)} with ZPAQ-level algorithm`);
+    // console.log(`Compressing ${humanFileSize(originalSize)} with ZPAQ-level algorithm`);
 
     // Apply compression pipeline
     onProgress?.(10);
@@ -116,7 +116,7 @@ export class ZPAQCompressor {
     const ratio = ((originalSize - compressedSize) / originalSize) * 100;
     const duration = ((performance.now() - start) / 1000).toFixed(2);
 
-    console.log(`Compressed in ${duration}s: ${humanFileSize(originalSize)} → ${humanFileSize(compressedSize)} (${ratio.toFixed(1)}% reduction)`);
+    // console.log(`Compressed in ${duration}s: ${humanFileSize(originalSize)} → ${humanFileSize(compressedSize)} (${ratio.toFixed(1)}% reduction)`);
 
     return {
       compressed: new Uint8Array(compressed),
@@ -146,7 +146,7 @@ export class ZPAQCompressor {
     }
 
     const arrayBuffer = data instanceof Uint8Array ? data.buffer : data;
-    console.log(`Decompressing ${humanFileSize(arrayBuffer.byteLength)}`);
+    // console.log(`Decompressing ${humanFileSize(arrayBuffer.byteLength)}`);
     const start = performance.now();
 
     // Reverse compression pipeline
@@ -168,7 +168,7 @@ export class ZPAQCompressor {
     onProgress?.(100);
 
     const duration = ((performance.now() - start) / 1000).toFixed(2);
-    console.log(`Decompressed in ${duration}s`);
+    // console.log(`Decompressed in ${duration}s`);
 
     return original.buffer;
   }

@@ -62,9 +62,9 @@ const cleanupInterval = setInterval(() => {
     }
   }
   
-  if (cleanedCount > 0) {
-    console.log(`[CLEANUP] Removed ${cleanedCount} expired PIN(s)`);
-  }
+  // if (cleanedCount > 0) {
+  //   console.log(`[CLEANUP] Removed ${cleanedCount} expired PIN(s)`);
+  // }
 }, 60 * 1000);
 
 const app = new Elysia()
@@ -99,8 +99,8 @@ const app = new Elysia()
       
       connectedClients.add(ws);
       
-      console.log(`[${clientId}] Client connected`);
-      console.log(`[INFO] Total clients: ${connectedClients.size}`);
+      // console.log(`[${clientId}] Client connected`);
+      // console.log(`[INFO] Total clients: ${connectedClients.size}`);
       
       try {
         ws.send(JSON.stringify({ 
@@ -131,10 +131,10 @@ const app = new Elysia()
 
           const connection = pinConnections.get(pin);
           if (connection && connection.offer) {
-            console.log(`[${clientId}] Sending stored offer for PIN: ${pin}`);
+            // console.log(`[${clientId}] Sending stored offer for PIN: ${pin}`);
             ws.send(JSON.stringify(connection.offer));
           } else {
-            console.log(`[${clientId}] No offer found for PIN: ${pin}`);
+            // console.log(`[${clientId}] No offer found for PIN: ${pin}`);
             ws.send(JSON.stringify({ 
               status: 'waiting',
               pin,
@@ -149,7 +149,7 @@ const app = new Elysia()
             error: 'Invalid PIN format. Must be 6 digits.',
             received: pin
           }));
-          console.log(`[${clientId}] Invalid PIN format: ${pin}`);
+          // console.log(`[${clientId}] Invalid PIN format: ${pin}`);
           return;
         }
 
@@ -159,7 +159,7 @@ const app = new Elysia()
               error: 'PIN already in use. Please generate a new PIN.',
               pin 
             }));
-            console.log(`[${clientId}] PIN ${pin} already in use`);
+            // console.log(`[${clientId}] PIN ${pin} already in use`);
             return;
           }
 
@@ -176,7 +176,7 @@ const app = new Elysia()
             message: 'Waiting for receiver to connect...'
           }));
           
-          console.log(`[${clientId}] Stored offer for PIN: ${pin}`);
+          // console.log(`[${clientId}] Stored offer for PIN: ${pin}`);
           
           connectedClients.forEach((client) => {
             if (client !== ws) {
@@ -199,7 +199,7 @@ const app = new Elysia()
               error: 'No offer found for this PIN. Please check the PIN.',
               pin 
             }));
-            console.log(`[${clientId}] No offer found for PIN: ${pin}`);
+            // console.log(`[${clientId}] No offer found for PIN: ${pin}`);
             return;
           }
 
@@ -208,14 +208,14 @@ const app = new Elysia()
               error: 'Sender disconnected. Please get a new PIN.',
               pin 
             }));
-            console.log(`[${clientId}] Offer socket unavailable for PIN: ${pin}`);
+            // console.log(`[${clientId}] Offer socket unavailable for PIN: ${pin}`);
             pinConnections.delete(pin);
             return;
           }
 
           try {
             connection.offerSocket.send(JSON.stringify(msg));
-            console.log(`[${clientId}] Relayed answer for PIN: ${pin} to client [${connection.clientId}]`);
+            // console.log(`[${clientId}] Relayed answer for PIN: ${pin} to client [${connection.clientId}]`);
             
             ws.send(JSON.stringify({ 
               status: 'answer_sent', 
@@ -225,7 +225,7 @@ const app = new Elysia()
             
             setTimeout(() => {
               pinConnections.delete(pin);
-              console.log(`[${clientId}] Cleaned up PIN: ${pin}`);
+              // console.log(`[${clientId}] Cleaned up PIN: ${pin}`);
             }, 5000);
             
           } catch (error: any) {
@@ -241,7 +241,7 @@ const app = new Elysia()
             error: 'Unknown message type',
             received: type
           }));
-          console.log(`[${clientId}] Unknown message type: ${type}`);
+          // console.log(`[${clientId}] Unknown message type: ${type}`);
         }
         
       } catch (error: any) {
@@ -258,8 +258,8 @@ const app = new Elysia()
       
       connectedClients.delete(ws);
       
-      console.log(`[${clientId}] Client disconnected`);
-      console.log(`[INFO] Total clients: ${connectedClients.size}`);
+      // console.log(`[${clientId}] Client disconnected`);
+      // console.log(`[INFO] Total clients: ${connectedClients.size}`);
       
       let cleanedPins = 0;
       for (const [pin, data] of pinConnections.entries()) {
@@ -270,7 +270,7 @@ const app = new Elysia()
       }
       
       if (cleanedPins > 0) {
-        console.log(`[${clientId}] Cleaned up ${cleanedPins} PIN(s)`);
+        // console.log(`[${clientId}] Cleaned up ${cleanedPins} PIN(s)`);
       }
     }
   })
@@ -279,26 +279,26 @@ const app = new Elysia()
 
 const localIP = getLocalIPAddress();
 
-console.log('===========================================');
-console.log('  WebRTC Signaling Server Started');
-console.log('===========================================');
-console.log(`  Port: ${PORT}`);
-console.log(`  Local IP: ${localIP}`);
-console.log('===========================================');
-console.log('  Connection URLs:');
-console.log(`  • Local:   ws://localhost:${PORT}/ws`);
-console.log(`  • Network: ws://${localIP}:${PORT}/ws`);
-console.log(`  • HTTP:    http://${localIP}:${PORT}`);
-console.log('===========================================');
-console.log('  Share the Network URL with other devices');
-console.log('  on the same WiFi/LAN to connect!');
-console.log('===========================================');
+// console.log('===========================================');
+// console.log('  WebRTC Signaling Server Started');
+// console.log('===========================================');
+// console.log(`  Port: ${PORT}`);
+// console.log(`  Local IP: ${localIP}`);
+// console.log('===========================================');
+// console.log('  Connection URLs:');
+// console.log(`  • Local:   ws://localhost:${PORT}/ws`);
+// console.log(`  • Network: ws://${localIP}:${PORT}/ws`);
+// console.log(`  • HTTP:    http://${localIP}:${PORT}`);
+// console.log('===========================================');
+// console.log('  Share the Network URL with other devices');
+// console.log('  on the same WiFi/LAN to connect!');
+// console.log('===========================================');
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 function shutdown() {
-  console.log('\n[SHUTDOWN] Shutting down gracefully...');
+  // console.log('\n[SHUTDOWN] Shutting down gracefully...');
   clearInterval(cleanupInterval);
   
   connectedClients.forEach((client) => {
@@ -314,6 +314,6 @@ function shutdown() {
   });
   
   app.stop();
-  console.log('[SHUTDOWN] Server closed');
+  // console.log('[SHUTDOWN] Server closed');
   process.exit(0);
 }
