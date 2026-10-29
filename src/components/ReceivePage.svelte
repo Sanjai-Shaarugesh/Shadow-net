@@ -5,7 +5,7 @@
   import ScanQrModal from '../components/qr/ScanQrModal.svelte';
   import Collapse from '../components/layout/Collapse.svelte';
   import Eye from '../components/icons/Eye.svelte';
- 
+
   import {
     Antenna,
     Copy,
@@ -25,8 +25,19 @@
     X
   } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
-  import SignalingService from '../utils/signaling';
-  import type { SignalingMessage } from '../utils/signaling';
+  import {
+    encodeSignal,
+    decodeSignal,
+    takeCodeFromHash,
+    type SignalPayload
+  } from '../utils/manualSignaling';
+  import {
+    joinSession,
+    looksLikeShortCode,
+    takeShortCodeFromHash,
+    waitForIceFast,
+    type JoinSession
+  } from '../utils/shortCode';
   import {
     exportRsaPublicKeyToBase64,
     generateRsaKeyPair,
@@ -36,9 +47,9 @@
   import Sender from '../components/sender/Sender.svelte';
   import Toast from '../components/Toast.svelte';
 
-  let signalingService = $state(SignalingService.getInstance());
-
-  let connectionPIN = $state('');
+  // Serverless signaling state
+  let offerInput = $state('');
+  let answerCode = $state('');
   let isProcessing = $state(false);
   let isConnecting = $state(false);
   let dataChannel: RTCDataChannel | undefined = $state(undefined);
@@ -52,7 +63,7 @@
 
   let connection: RTCPeerConnection | undefined = $state(undefined);
   let cleanupListener: (() => void) | undefined = $state(undefined);
-  
+
   let isMinimized = $state(true);
   let isVideoCallVisible = $state(false);
 
@@ -60,7 +71,7 @@
   let remoteStream: MediaStream | undefined = $state(undefined);
   let isVideoOn = $state(false);
   let isAudioOn = $state(false);
-  
+
   let currentCamera: 'user' | 'environment' = $state('user');
   let isFullscreen = $state(false);
   let isRemoteAudioActivity = $state(false);
@@ -75,17 +86,17 @@
   $effect(() => {
     if (localVideoEl && localStream) {
       localVideoEl.srcObject = localStream;
-      localVideoEl.play().catch(err => console.error('Error playing local video:', err));
+      localVideoEl.play().catch((err) => console.error('Error playing local video:', err));
     }
   });
-  
+
   $effect(() => {
     if (remoteVideoEl && remoteStream) {
       remoteVideoEl.srcObject = remoteStream;
-      remoteVideoEl.play().catch(err => console.error('Error playing remote video:', err));
+      remoteVideoEl.play().catch((err) => console.error('Error playing remote video:', err));
     }
   });
-  
+
   async function startLocalMedia() {
     try {
       // For Capacitor Android, request permissions first
@@ -113,15 +124,15 @@
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
+
       // Disable video and audio by default
-      stream.getVideoTracks().forEach(track => track.enabled = false);
-      stream.getAudioTracks().forEach(track => track.enabled = false);
-      
+      stream.getVideoTracks().forEach((track) => (track.enabled = false));
+      stream.getAudioTracks().forEach((track) => (track.enabled = false));
+
       localStream = stream;
       isVideoOn = false;
       isAudioOn = false;
-      
+
       addToastMessage('Local media started (video and audio disabled)', 'success');
       return stream;
     } catch (error) {
@@ -135,7 +146,7 @@
     if (localStream) {
       const tracks = localStream.getVideoTracks();
       if (tracks.length > 0) {
-        tracks.forEach(track => track.enabled = !track.enabled);
+        tracks.forEach((track) => (track.enabled = !track.enabled));
         isVideoOn = tracks[0].enabled;
         addToastMessage(`Video ${isVideoOn ? 'on' : 'off'}`, isVideoOn ? 'info' : 'warning');
       }
@@ -146,7 +157,7 @@
     if (localStream) {
       const tracks = localStream.getAudioTracks();
       if (tracks.length > 0) {
-        tracks.forEach(track => track.enabled = !track.enabled);
+        tracks.forEach((track) => (track.enabled = !track.enabled));
         isAudioOn = tracks[0].enabled;
         addToastMessage(`Audio ${isAudioOn ? 'on' : 'off'}`, isAudioOn ? 'info' : 'warning');
       }
@@ -156,8 +167,10 @@
   function toggleFullScreen() {
     if (remoteVideoEl) {
       if (!document.fullscreenElement) {
-        remoteVideoEl.requestFullscreen().catch(err => {
-          console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+        remoteVideoEl.requestFullscreen().catch((err) => {
+          console.error(
+            `Error attempting to enable full-screen mode: ${err.message} (${err.name})`
+          );
           addToastMessage('Failed to enter fullscreen', 'error');
         });
         isFullscreen = true;
@@ -176,7 +189,7 @@
       }
       isFullscreen = false;
     }
-    
+
     // Prevent body scroll when in fullscreen
     if (!isMinimized) {
       document.body.style.overflow = 'hidden';
@@ -196,24 +209,27 @@
       document.body.style.overflow = '';
     }
   }
-    
+
   async function switchCamera() {
     currentCamera = currentCamera === 'user' ? 'environment' : 'user';
-    addToastMessage(`Switching to ${currentCamera === 'user' ? 'Front' : 'Back'} Camera...`, 'info');
-    
+    addToastMessage(
+      `Switching to ${currentCamera === 'user' ? 'Front' : 'Back'} Camera...`,
+      'info'
+    );
+
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      localStream.getTracks().forEach((track) => track.stop());
       localStream = undefined;
     }
 
     const newStream = await startLocalMedia();
-    
+
     if (connection && newStream) {
       const videoTrack = newStream.getVideoTracks()[0];
       const audioTrack = newStream.getAudioTracks()[0];
-      
+
       if (videoTrack) {
-        const sender = connection.getSenders().find(s => s.track?.kind === 'video');
+        const sender = connection.getSenders().find((s) => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(videoTrack);
           // console.log('✅ Video track replaced with new camera');
@@ -223,7 +239,7 @@
       }
 
       if (audioTrack) {
-        const sender = connection.getSenders().find(s => s.track?.kind === 'audio');
+        const sender = connection.getSenders().find((s) => s.track?.kind === 'audio');
         if (sender) {
           await sender.replaceTrack(audioTrack);
         } else {
@@ -233,178 +249,201 @@
     }
   }
 
-  async function processConnectionPIN() {
-    if (!connectionPIN || connectionPIN.length !== 6) {
-      addToastMessage('Please enter a valid 6-digit PIN', 'error');
+  async function createAnswer() {
+    if (!offerInput.trim()) {
+      addToastMessage("Paste the sender's offer code first", 'error');
       return;
     }
 
     isProcessing = true;
-    addToastMessage('Listening for offer...', 'info');
+    answerCode = '';
     try {
-      cleanupListener = signalingService.listenForOffer(connectionPIN, async (offer: SignalingMessage) => {
-        try {
-          const stream = await startLocalMedia();
+      // Short code -> look the offer up on the relay; long code -> old offline flow
+      let join: JoinSession | undefined;
+      let offer: SignalPayload;
+      if (looksLikeShortCode(offerInput)) {
+        join = await joinSession(offerInput);
+        offer = join.offer;
+      } else {
+        offer = await decodeSignal(offerInput, 'offer');
+      }
 
-          const iceServer = offer.iceServer || defaultSendOptions.iceServer;
-          const config: RTCConfiguration = {
-            iceServers: [
-              { urls: iceServer },
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ],
-            bundlePolicy: 'balanced',
-            iceCandidatePoolSize: 4
+      if (connection) {
+        connection.close();
+        connection = undefined;
+      }
+
+      const stream = await startLocalMedia();
+
+      const iceServer = offer.ice || defaultSendOptions.iceServer;
+      const config: RTCConfiguration = {
+        iceServers: [
+          { urls: iceServer },
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ],
+        bundlePolicy: 'balanced',
+        iceCandidatePoolSize: 4
+      };
+
+      connection = new RTCPeerConnection(config);
+
+      if (offer.pk) {
+        rsaPub = await importRsaPublicKeyFromBase64(offer.pk);
+        rsa = await generateRsaKeyPair();
+      } else {
+        rsa = undefined;
+        rsaPub = undefined;
+      }
+
+      if (stream && connection) {
+        stream.getTracks().forEach((track) => {
+          connection!.addTrack(track, stream);
+          // console.log(`✅ Added ${track.kind} track to peer connection`);
+        });
+      }
+
+      if (connection) {
+        connection.ontrack = (event) => {
+          // console.log('Received remote track:', event.track.kind);
+          if (event.streams && event.streams[0]) {
+            remoteStream = event.streams[0];
+            // console.log('✅ Remote stream set');
+          }
+
+          if (event.track.kind === 'audio' && remoteStream) {
+            try {
+              const audioContext = new (window.AudioContext ||
+                (window as any).webkitAudioContext)();
+              const mediaStreamSource = audioContext.createMediaStreamSource(remoteStream);
+              const analyser = audioContext.createAnalyser();
+              analyser.fftSize = 256;
+              mediaStreamSource.connect(analyser);
+
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              const checkAudio = () => {
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+                isRemoteAudioActivity = average > 5;
+                requestAnimationFrame(checkAudio);
+              };
+              checkAudio();
+            } catch (e) {
+              console.error('Audio analysis error:', e);
+            }
+          }
+        };
+      }
+
+      if (connection) {
+        connection.ondatachannel = (event) => {
+          dataChannel = event.channel;
+          dataChannel.onopen = () => {
+            addToastMessage('Connected! Click "Show Video Call" to enable camera/mic.', 'success');
+            isConnecting = true;
+            isProcessing = false;
+            // Video call stays hidden until user clicks "Show Video Call" button
+            isVideoCallVisible = false;
           };
 
-          connection = new RTCPeerConnection(config);
-
-          if (offer.publicKey) {
-            rsaPub = await importRsaPublicKeyFromBase64(offer.publicKey);
-            rsa = await generateRsaKeyPair();
-          } else {
-            rsa = undefined;
-            rsaPub = undefined;
-          }
-
-          if (stream && connection) {
-            stream.getTracks().forEach(track => {
-              connection!.addTrack(track, stream);
-              // console.log(`✅ Added ${track.kind} track to peer connection`);
-            });
-          }
-
-          if (connection) {
-            connection.ontrack = (event) => {
-              // console.log('Received remote track:', event.track.kind);
-              if (event.streams && event.streams[0]) {
-                remoteStream = event.streams[0];
-                // console.log('✅ Remote stream set');
-              }
-
-              if (event.track.kind === 'audio' && remoteStream) {
-                try {
-                  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-                  const mediaStreamSource = audioContext.createMediaStreamSource(remoteStream);
-                  const analyser = audioContext.createAnalyser();
-                  analyser.fftSize = 256;
-                  mediaStreamSource.connect(analyser);
-
-                  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                  const checkAudio = () => {
-                    analyser.getByteFrequencyData(dataArray);
-                    const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
-                    isRemoteAudioActivity = average > 5;
-                    requestAnimationFrame(checkAudio);
-                  };
-                  checkAudio();
-                } catch (e) {
-                  console.error('Audio analysis error:', e);
-                }
-              }
-            };
-          }
-
-          if (connection) {
-            connection.ondatachannel = (event) => {
-              dataChannel = event.channel;
-              dataChannel.onopen = () => {
-                addToastMessage('Connected! Click "Show Video Call" to enable camera/mic.', 'success');
-                isConnecting = true;
-                isProcessing = false;
-                // Video call stays hidden until user clicks "Show Video Call" button
-                isVideoCallVisible = false;
-              };
-
-              dataChannel.onmessage = (event) => {
-                const message = Message.decode(new Uint8Array(event.data));
-                if (message.metaData !== undefined && receiver) {
-                  receiver.onMetaData(message.id, message.metaData);
-                  showNewFile = true;
-                } else if (message.chunk !== undefined && receiver) {
-                  receiver.onChunkData(message.id, message.chunk);
-                } else if (message.receiveEvent !== undefined && sender) {
-                  sender.onReceiveEvent(message.id, message.receiveEvent);
-                }
-              };
-              
-              dataChannel.onerror = () => {
-                addToastMessage('WebRTC error', 'error');
-                isConnecting = false;
-                isVideoCallVisible = false;
-              };
-
-              dataChannel.onclose = () => {
-                addToastMessage('Disconnected', 'error');
-                isConnecting = false;
-                isVideoCallVisible = false;
-                if (localStream) {
-                  localStream.getTracks().forEach(track => track.stop());
-                  localStream = undefined;
-                }
-                remoteStream = undefined;
-              };
-            };
-          }
-
-          if (!connection) return;
-          await connection.setRemoteDescription({
-            type: 'offer',
-            sdp: offer.sdp
-          });
-          
-          let publicKeyBase64 = '';
-          if (rsa) {
-            publicKeyBase64 = await exportRsaPublicKeyToBase64(rsa.publicKey);
-          }
-
-          connection.onicecandidate = async (event) => {
-            if (!event.candidate && connection!.localDescription) {
-              await signalingService.sendAnswer(
-                connectionPIN,
-                connection!.localDescription.sdp,
-                publicKeyBase64
-              );
-              addToastMessage('Answer sent, waiting for connection...', 'success');
+          dataChannel.onmessage = (event) => {
+            const message = Message.decode(new Uint8Array(event.data));
+            if (message.metaData !== undefined && receiver) {
+              receiver.onMetaData(message.id, message.metaData);
+              showNewFile = true;
+            } else if (message.chunk !== undefined && receiver) {
+              receiver.onChunkData(message.id, message.chunk);
+            } else if (message.receiveEvent !== undefined && sender) {
+              sender.onReceiveEvent(message.id, message.receiveEvent);
             }
           };
-          
-          const answer = await connection.createAnswer();
-          await connection.setLocalDescription(answer);
-          
-          setTimeout(() => {
-            if (connection!.iceGatheringState !== 'complete') {
-              // console.log('ICE timeout reached, forcing answer send.');
-              connection!.onicecandidate!({ candidate: null } as RTCPeerConnectionIceEvent);
+
+          dataChannel.onerror = () => {
+            addToastMessage('WebRTC error', 'error');
+            isConnecting = false;
+            isVideoCallVisible = false;
+          };
+
+          dataChannel.onclose = () => {
+            addToastMessage('Disconnected', 'error');
+            isConnecting = false;
+            isVideoCallVisible = false;
+            if (localStream) {
+              localStream.getTracks().forEach((track) => track.stop());
+              localStream = undefined;
             }
-          }, waitIceCandidatesTimeout);
-        } catch (error) {
-          console.error('Error processing offer:', error);
-          addToastMessage('Failed to process offer', 'error');
-          isProcessing = false;
-        }
-      });
+            remoteStream = undefined;
+          };
+        };
+      }
+
+      if (!connection) return;
+      await connection.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
+
+      let publicKeyBase64 = '';
+      if (rsa) {
+        publicKeyBase64 = await exportRsaPublicKeyToBase64(rsa.publicKey);
+      }
+
+      const answer = await connection.createAnswer();
+      await connection.setLocalDescription(answer);
+
+      // No signaling server => wait until all ICE candidates are in the SDP
+      await waitForIceFast(connection, Math.min(waitIceCandidatesTimeout, 4000));
+
+      const sdp = connection.localDescription?.sdp;
+      if (!sdp) throw new Error('No local description');
+
+      const answerPayload: SignalPayload = {
+        t: 'answer',
+        sdp,
+        pk: publicKeyBase64 || undefined
+      };
+      if (join) {
+        await join.sendAnswer(answerPayload);
+        addToastMessage('Connecting to the sender...', 'success');
+      } else {
+        answerCode = await encodeSignal(answerPayload);
+        addToastMessage('Answer code ready! Send it back to the sender', 'success');
+      }
     } catch (error) {
-      console.error('Error setting up listener:', error);
-      addToastMessage('Failed to set up connection', 'error');
+      console.error('Error processing offer:', error);
+      addToastMessage(error instanceof Error ? error.message : 'Failed to process offer', 'error');
       isProcessing = false;
     }
   }
 
+  async function copyText(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      addToastMessage(`${label} copied!`, 'info');
+    } catch (error) {
+      addToastMessage(`Failed to copy ${label.toLowerCase()}`, 'error');
+    }
+  }
+
+  async function pasteOffer() {
+    try {
+      offerInput = await navigator.clipboard.readText();
+    } catch {
+      addToastMessage('Clipboard blocked - paste manually into the box', 'warning');
+    }
+  }
+
   function handleQRScan(data: string) {
-    if (data && data.length === 6 && /^\d+$/.test(data)) {
-      connectionPIN = data;
-      addToastMessage('PIN scanned successfully!', 'success');
-      processConnectionPIN();
+    if (data && (data.length > 20 || looksLikeShortCode(data))) {
+      offerInput = data;
+      addToastMessage('Code scanned successfully!', 'success');
+      createAnswer();
     } else {
-      addToastMessage('Invalid QR code. Expected 6-digit PIN.', 'error');
+      addToastMessage('Invalid QR code. Expected an offer code.', 'error');
     }
   }
 
   function navigateToOfferPage() {
     window.location.href = `${window.location.origin}/`;
   }
- 
+
   onMount(() => {
     // console.log('📄 Answer page mounted');
 
@@ -413,6 +452,13 @@
     isAndroid = isCapacitor && (window as any).Capacitor?.getPlatform() === 'android';
 
     // console.log('Platform:', { isCapacitor, isAndroid });
+
+    // Opened from a share link? Pre-fill the offer code (user still clicks the button)
+    const linkedOffer = takeShortCodeFromHash() ?? takeCodeFromHash('offer');
+    if (linkedOffer) {
+      offerInput = linkedOffer;
+      addToastMessage('Offer code loaded from link', 'success');
+    }
 
     let gPressed = false;
 
@@ -427,22 +473,17 @@
         gPressed = false;
       }
 
-      if (e.key === 'Enter') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        processConnectionPIN();
+        createAnswer();
       } else if (e.altKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        processConnectionPIN();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-        const inputElement = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (inputElement) {
-          inputElement.focus();
-        }
+        createAnswer();
       }
     };
 
     window.addEventListener('keydown', handleShortcut);
-    
+
     return () => {
       window.removeEventListener('keydown', handleShortcut);
       if (cleanupListener) {
@@ -450,14 +491,14 @@
       }
     };
   });
-  
+
   onDestroy(() => {
     // console.log('🧹 Answer page cleanup');
     if (cleanupListener) {
       cleanupListener();
     }
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+      localStream.getTracks().forEach((track) => track.stop());
     }
     if (connection) {
       connection.close();
@@ -467,65 +508,68 @@
   });
 </script>
 
-<div class="container mx-auto p-4 max-w-3xl" class:video-call-active={isConnecting && isVideoCallVisible}>
+<div
+  class="container mx-auto p-4 max-w-3xl"
+  class:video-call-active={isConnecting && isVideoCallVisible}
+>
   <h1 class="text-2xl font-bold mb-4">File Transfer - Answer Page</h1>
 
-  <Collapse title="1. Enter Connection PIN" isOpen={!isConnecting}>
-    <p class="mb-4">
-      Enter the 6-digit PIN provided by the sender to establish a connection.
-    </p>
-    <div class="mt-4">
-      <div class="form-control">
-        <label class="label">
-          <span class="label-text">Connection PIN</span>
-        </label>
-        <input
-          type="text"
-          class="input input-bordered w-full text-center text-2xl font-mono tracking-wider"
-          placeholder="000000"
-          maxlength="6"
-          bind:value={connectionPIN}
-          disabled={isProcessing || isConnecting}
-          oninput={(e) => {
-            const target = e.target as HTMLInputElement;
-            target.value = target.value.replace(/[^0-9]/g, '');
-            connectionPIN = target.value;
-          }}
-        />
-      </div>
-      
-      <div class="mt-4 flex gap-2 flex-wrap">
+  <Collapse title="1. Connect" isOpen={!isConnecting}>
+    <p class="mb-2 font-semibold">A. Enter the sender's code</p>
+    <textarea
+      id="offer-input"
+      class="textarea textarea-bordered w-full font-mono text-xs h-28"
+      placeholder="Enter code, e.g. K7QXM-29PD9 (or paste a link / long offline code)"
+      bind:value={offerInput}
+      disabled={isProcessing || isConnecting}
+    ></textarea>
+
+    <div class="mt-2 flex gap-2 flex-wrap">
+      <button class="btn btn-ghost" onclick={pasteOffer} disabled={isProcessing || isConnecting}>
+        Paste <Copy />
+      </button>
+      <button
+        class="btn btn-outline btn-accent flex-1"
+        onclick={createAnswer}
+        disabled={isProcessing || isConnecting || !offerInput.trim()}
+      >
+        {#if isProcessing && !answerCode}
+          <span class="loading loading-spinner"></span>
+          Connecting...
+        {:else}
+          {looksLikeShortCode(offerInput) ? 'Connect' : 'Create Answer Code'} <Key />
+        {/if}
+      </button>
+    </div>
+
+    {#if answerCode}
+      <div class="divider"></div>
+      <p class="mb-2 font-semibold">B. Send this answer code back to the sender</p>
+      <textarea
+        class="textarea textarea-bordered w-full font-mono text-xs h-28"
+        readonly
+        value={answerCode}
+        onfocus={(e) => (e.currentTarget as HTMLTextAreaElement).select()}
+      ></textarea>
+      <div class="flex gap-2 flex-wrap mt-2">
         <button
-          class="btn btn-outline btn-accent flex-1"
-          onclick={processConnectionPIN}
-          disabled={isProcessing || isConnecting || connectionPIN.length !== 6}
+          class="btn btn-soft btn-success"
+          onclick={() => copyText(answerCode, 'Answer code')}
         >
-          {#if isProcessing}
-            <span class="loading loading-spinner"></span>
-            Connecting...
-          {:else}
-            Connect <Key />
-          {/if}
+          Copy Code <Copy />
         </button>
       </div>
-
-      <div class="mt-4 flex gap-2">
-        <a href="/" data-navigo>
-          <button class="btn btn-dash btn-warning" onclick={navigateToOfferPage}>
-            Go to Offer Page <CircleArrowOutUpLeft />
-          </button>
-        </a>
+      <div class="alert alert-info mt-4">
+        <span>Waiting for the sender to paste your answer code...</span>
       </div>
+    {/if}
 
-      {#if isProcessing}
-        <div class="alert alert-info mt-4">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <span>Waiting for sender to generate offer with this PIN...</span>
-        </div>
-      {/if}
+    <div class="mt-4 flex gap-2">
+      <a href="/" data-navigo>
+        <button class="btn btn-dash btn-warning" onclick={navigateToOfferPage}>
+          Go to Offer Page <CircleArrowOutUpLeft />
+        </button>
+      </a>
     </div>
   </Collapse>
 
@@ -581,7 +625,7 @@
 
       {#if isConnecting}
         <div class="mt-6 flex justify-center">
-          <button 
+          <button
             class="btn btn-primary btn-lg gap-2 shadow-lg"
             class:animate-pulse={!isVideoCallVisible}
             onclick={toggleVideoCallVisibility}
@@ -602,272 +646,247 @@
 
 <!-- Video Call UI - OUTSIDE main container to prevent overlap -->
 {#if isConnecting && isVideoCallVisible}
-  <div 
+  <div
     class="video-call-container {isMinimized ? 'minimized' : 'fullscreen'}"
     style="display: block;"
   >
     {#if !isMinimized}
       <!-- Full Screen Mode -->
       <div class="video-fullscreen-wrapper">
-          <!-- Remote Video (Full Screen Background) -->
-          <div class="video-remote-container">
-            <video
-              bind:this={remoteVideoEl}
-              autoplay
-              playsinline
-              class="video-element"
-            />
-            {#if !remoteStream}
-              <div class="video-placeholder">
-                <div class="video-placeholder-icon">
-                  <div class="video-placeholder-inner">
-                    <Video class="w-12 h-12 text-[#25d366]" />
-                  </div>
-                </div>
-                <p class="video-placeholder-text">Connecting...</p>
-                <p class="video-placeholder-subtext">Waiting for remote stream</p>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Top Bar -->
-          <div class="video-topbar">
-            <div class="video-topbar-content">
-              <div class="video-topbar-user">
-                <div class="video-avatar">
-                  <span class="video-avatar-text">P</span>
-                </div>
-                <div>
-                  <p class="video-username">Peer User</p>
-                  <p class="video-status">
-                    {#if isRemoteAudioActivity}
-                      Speaking...
-                    {:else}
-                      Connected
-                    {/if}
-                  </p>
+        <!-- Remote Video (Full Screen Background) -->
+        <div class="video-remote-container">
+          <video bind:this={remoteVideoEl} autoplay playsinline class="video-element" />
+          {#if !remoteStream}
+            <div class="video-placeholder">
+              <div class="video-placeholder-icon">
+                <div class="video-placeholder-inner">
+                  <Video class="w-12 h-12 text-[#25d366]" />
                 </div>
               </div>
-              <div class="video-topbar-actions">
-                <button
-                  onclick={toggleMinimize}
-                  class="video-icon-btn"
-                  title="Minimize"
-                >
-                  <Minimize2 class="w-5 h-5 text-white" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Local Video (Floating Picture-in-Picture) -->
-          <div class="video-local-pip">
-            <video
-              bind:this={localVideoEl}
-              autoplay
-              playsinline
-              muted
-              class="video-element"
-            />
-            {#if !localStream}
-              <div class="video-local-placeholder">
-                <VideoOff class="w-8 h-8 text-gray-500" />
-              </div>
-            {/if}
-            {#if !isVideoOn && localStream}
-              <div class="video-local-placeholder">
-                <div class="video-local-avatar">
-                  <span class="video-local-avatar-text">You</span>
-                </div>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Audio Activity Indicator -->
-          {#if isRemoteAudioActivity}
-            <div class="video-audio-indicator">
-              <div class="video-audio-badge">
-                <div class="video-audio-bars">
-                  <div class="video-audio-bar" style="animation-delay: 0ms;"></div>
-                  <div class="video-audio-bar" style="animation-delay: 150ms;"></div>
-                  <div class="video-audio-bar" style="animation-delay: 300ms;"></div>
-                </div>
-                <span class="video-audio-text">Speaking</span>
-              </div>
+              <p class="video-placeholder-text">Connecting...</p>
+              <p class="video-placeholder-subtext">Waiting for remote stream</p>
             </div>
           {/if}
-
-          <!-- Bottom Controls -->
-          <div class="video-controls">
-            <div class="video-controls-inner">
-              <!-- Audio Toggle -->
-              <button
-                onclick={toggleAudio}
-                disabled={!localStream}
-                class="video-control-btn {isAudioOn ? 'video-control-btn-active' : 'video-control-btn-inactive'}"
-                title={isAudioOn ? 'Mute' : 'Unmute'}
-              >
-                {#if isAudioOn}
-                  <Mic class="w-6 h-6 text-white" />
-                {:else}
-                  <MicOff class="w-6 h-6 text-white" />
-                {/if}
-              </button>
-
-              <!-- Video Toggle -->
-              <button
-                onclick={toggleVideo}
-                disabled={!localStream}
-                class="video-control-btn {isVideoOn ? 'video-control-btn-active' : 'video-control-btn-inactive'}"
-                title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
-              >
-                {#if isVideoOn}
-                  <Video class="w-6 h-6 text-white" />
-                {:else}
-                  <VideoOff class="w-6 h-6 text-white" />
-                {/if}
-              </button>
-
-              <!-- End Call -->
-              <button
-                onclick={toggleVideoCallVisibility}
-                class="video-control-btn video-control-btn-end"
-                title="Hide video call"
-              >
-                <X class="w-8 h-8 text-white" />
-              </button>
-
-              <!-- Switch Camera -->
-              <button
-                onclick={switchCamera}
-                disabled={!localStream}
-                class="video-control-btn video-control-btn-active"
-                title="Switch camera"
-              >
-                <RotateCw class="w-6 h-6 text-white" />
-              </button>
-            </div>
         </div>
-      </div>
-    {:else}
-      <!-- Minimized Mode -->
-      <div class="video-minimized-wrapper">
-          <!-- Minimized Header -->
-          <div class="video-minimized-header">
-            <div class="video-minimized-user">
-              <div class="video-minimized-icon">
-                <Video class="w-4 h-4 text-[#25d366]" />
+
+        <!-- Top Bar -->
+        <div class="video-topbar">
+          <div class="video-topbar-content">
+            <div class="video-topbar-user">
+              <div class="video-avatar">
+                <span class="video-avatar-text">P</span>
               </div>
               <div>
-                <p class="video-minimized-username">Peer User</p>
-                <p class="video-minimized-status">
+                <p class="video-username">Peer User</p>
+                <p class="video-status">
                   {#if isRemoteAudioActivity}
-                    <span class="video-minimized-speaking">
-                      <span class="video-minimized-dot"></span>
-                      Speaking
-                    </span>
+                    Speaking...
                   {:else}
                     Connected
                   {/if}
                 </p>
               </div>
             </div>
-            <button
-              onclick={toggleMinimize}
-              class="video-minimized-btn"
-              title="Maximize"
-            >
-              <Maximize2 class="w-4 h-4 text-white" />
-            </button>
-          </div>
-
-          <!-- Minimized Video -->
-          <div class="video-minimized-video">
-            <video
-              bind:this={remoteVideoEl}
-              autoplay
-              playsinline
-              class="video-element"
-            />
-            {#if !remoteStream}
-              <div class="video-minimized-placeholder">
-                <div class="video-minimized-placeholder-icon">
-                  <Video class="w-8 h-8 text-[#25d366]/50" />
-                </div>
-              </div>
-            {/if}
-
-            <!-- Small Local Video in Corner -->
-            <div class="video-minimized-local">
-              <video
-                bind:this={localVideoEl}
-                autoplay
-                playsinline
-                muted
-                class="video-element"
-              />
-              {#if !isVideoOn && localStream}
-                <div class="video-minimized-local-placeholder">
-                  <div class="video-minimized-local-avatar">
-                    <span class="video-minimized-local-avatar-text">You</span>
-                  </div>
-                </div>
-              {/if}
+            <div class="video-topbar-actions">
+              <button onclick={toggleMinimize} class="video-icon-btn" title="Minimize">
+                <Minimize2 class="w-5 h-5 text-white" />
+              </button>
             </div>
           </div>
+        </div>
 
-          <!-- Minimized Controls -->
-          <div class="video-minimized-controls">
+        <!-- Local Video (Floating Picture-in-Picture) -->
+        <div class="video-local-pip">
+          <video bind:this={localVideoEl} autoplay playsinline muted class="video-element" />
+          {#if !localStream}
+            <div class="video-local-placeholder">
+              <VideoOff class="w-8 h-8 text-gray-500" />
+            </div>
+          {/if}
+          {#if !isVideoOn && localStream}
+            <div class="video-local-placeholder">
+              <div class="video-local-avatar">
+                <span class="video-local-avatar-text">You</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Audio Activity Indicator -->
+        {#if isRemoteAudioActivity}
+          <div class="video-audio-indicator">
+            <div class="video-audio-badge">
+              <div class="video-audio-bars">
+                <div class="video-audio-bar" style="animation-delay: 0ms;"></div>
+                <div class="video-audio-bar" style="animation-delay: 150ms;"></div>
+                <div class="video-audio-bar" style="animation-delay: 300ms;"></div>
+              </div>
+              <span class="video-audio-text">Speaking</span>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Bottom Controls -->
+        <div class="video-controls">
+          <div class="video-controls-inner">
+            <!-- Audio Toggle -->
             <button
               onclick={toggleAudio}
               disabled={!localStream}
-              class="video-minimized-control {isAudioOn ? 'video-minimized-control-active' : 'video-minimized-control-inactive'}"
+              class="video-control-btn {isAudioOn
+                ? 'video-control-btn-active'
+                : 'video-control-btn-inactive'}"
               title={isAudioOn ? 'Mute' : 'Unmute'}
             >
               {#if isAudioOn}
-                <Mic class="w-4 h-4 text-white" />
+                <Mic class="w-6 h-6 text-white" />
               {:else}
-                <MicOff class="w-4 h-4 text-white" />
+                <MicOff class="w-6 h-6 text-white" />
               {/if}
             </button>
 
+            <!-- Video Toggle -->
             <button
               onclick={toggleVideo}
               disabled={!localStream}
-              class="video-minimized-control {isVideoOn ? 'video-minimized-control-active' : 'video-minimized-control-inactive'}"
+              class="video-control-btn {isVideoOn
+                ? 'video-control-btn-active'
+                : 'video-control-btn-inactive'}"
               title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
             >
               {#if isVideoOn}
-                <Video class="w-4 h-4 text-white" />
+                <Video class="w-6 h-6 text-white" />
               {:else}
-                <VideoOff class="w-4 h-4 text-white" />
+                <VideoOff class="w-6 h-6 text-white" />
               {/if}
             </button>
 
+            <!-- End Call -->
+            <button
+              onclick={toggleVideoCallVisibility}
+              class="video-control-btn video-control-btn-end"
+              title="Hide video call"
+            >
+              <X class="w-8 h-8 text-white" />
+            </button>
+
+            <!-- Switch Camera -->
             <button
               onclick={switchCamera}
               disabled={!localStream}
-              class="video-minimized-control video-minimized-control-active"
+              class="video-control-btn video-control-btn-active"
               title="Switch camera"
             >
-              <RotateCw class="w-4 h-4 text-white" />
+              <RotateCw class="w-6 h-6 text-white" />
             </button>
+          </div>
+        </div>
+      </div>
+    {:else}
+      <!-- Minimized Mode -->
+      <div class="video-minimized-wrapper">
+        <!-- Minimized Header -->
+        <div class="video-minimized-header">
+          <div class="video-minimized-user">
+            <div class="video-minimized-icon">
+              <Video class="w-4 h-4 text-[#25d366]" />
+            </div>
+            <div>
+              <p class="video-minimized-username">Peer User</p>
+              <p class="video-minimized-status">
+                {#if isRemoteAudioActivity}
+                  <span class="video-minimized-speaking">
+                    <span class="video-minimized-dot"></span>
+                    Speaking
+                  </span>
+                {:else}
+                  Connected
+                {/if}
+              </p>
+            </div>
+          </div>
+          <button onclick={toggleMinimize} class="video-minimized-btn" title="Maximize">
+            <Maximize2 class="w-4 h-4 text-white" />
+          </button>
+        </div>
 
-            <button
-              onclick={toggleVideoCallVisibility}
-              class="video-minimized-control video-minimized-control-inactive"
-              title="Hide video call"
-            >
-              <X class="w-4 h-4 text-white" />
-            </button>
+        <!-- Minimized Video -->
+        <div class="video-minimized-video">
+          <video bind:this={remoteVideoEl} autoplay playsinline class="video-element" />
+          {#if !remoteStream}
+            <div class="video-minimized-placeholder">
+              <div class="video-minimized-placeholder-icon">
+                <Video class="w-8 h-8 text-[#25d366]/50" />
+              </div>
+            </div>
+          {/if}
+
+          <!-- Small Local Video in Corner -->
+          <div class="video-minimized-local">
+            <video bind:this={localVideoEl} autoplay playsinline muted class="video-element" />
+            {#if !isVideoOn && localStream}
+              <div class="video-minimized-local-placeholder">
+                <div class="video-minimized-local-avatar">
+                  <span class="video-minimized-local-avatar-text">You</span>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Minimized Controls -->
+        <div class="video-minimized-controls">
+          <button
+            onclick={toggleAudio}
+            disabled={!localStream}
+            class="video-minimized-control {isAudioOn
+              ? 'video-minimized-control-active'
+              : 'video-minimized-control-inactive'}"
+            title={isAudioOn ? 'Mute' : 'Unmute'}
+          >
+            {#if isAudioOn}
+              <Mic class="w-4 h-4 text-white" />
+            {:else}
+              <MicOff class="w-4 h-4 text-white" />
+            {/if}
+          </button>
+
+          <button
+            onclick={toggleVideo}
+            disabled={!localStream}
+            class="video-minimized-control {isVideoOn
+              ? 'video-minimized-control-active'
+              : 'video-minimized-control-inactive'}"
+            title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {#if isVideoOn}
+              <Video class="w-4 h-4 text-white" />
+            {:else}
+              <VideoOff class="w-4 h-4 text-white" />
+            {/if}
+          </button>
+
+          <button
+            onclick={switchCamera}
+            disabled={!localStream}
+            class="video-minimized-control video-minimized-control-active"
+            title="Switch camera"
+          >
+            <RotateCw class="w-4 h-4 text-white" />
+          </button>
+
+          <button
+            onclick={toggleVideoCallVisibility}
+            class="video-minimized-control video-minimized-control-inactive"
+            title="Hide video call"
+          >
+            <X class="w-4 h-4 text-white" />
+          </button>
         </div>
       </div>
     {/if}
   </div>
 {/if}
-
-
-
 
 <style>
   /* Incoming Call Notification */
@@ -1220,7 +1239,8 @@
   }
 
   @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 0.4;
       transform: scaleY(0.8);
     }
