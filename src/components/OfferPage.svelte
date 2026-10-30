@@ -22,6 +22,9 @@
   import Sender from '../components/sender/Sender.svelte';
   import Receiver from '../components/receiver/Receiver.svelte';
   import Toast from '../components/Toast.svelte';
+  import QrModal from '../components/qr/QrModal.svelte';
+  import ScanQrModal from '../components/qr/ScanQrModal.svelte';
+  import { identity } from './Peeridentity.svelte';
   import SessionShell from '../components/layout/SessionShell.svelte';
   import { ControlChannel } from '../utils/controlChannel';
   import { CallManager, tuneSdp } from '../utils/mediaCall.svelte';
@@ -34,6 +37,15 @@
   // Serverless signaling state
   let offerCode = $state('');
   let offerLink = $state('');
+  let nameInput = $state('');
+  // QR holds the share link: a phone camera opens the answer page with the code pre-filled
+  const qrValue = $derived(
+    !offerLink
+      ? ''
+      : /^https?:/i.test(offerLink)
+        ? offerLink
+        : new URL(offerLink, location.origin).href
+  );
   let answerInput = $state('');
   let applyingAnswer = $state(false);
   // true only when the public relay is unreachable and we fall back to the long offline code
@@ -66,6 +78,7 @@
     };
 
     connection = new RTCPeerConnection(config);
+    identity.attach(connection, 'offer'); // I'm "Peer 1" unless renamed; syncs name to the receiver
 
     connection.onicecandidateerror = (err) => {
       console.error('❌ ICE Candidate error:', err);
@@ -280,6 +293,7 @@
     ctrl?.close();
     connection?.close();
     session.reset();
+    identity.detach();
     window.location.reload();
   }
 
@@ -289,11 +303,12 @@
     ctrl?.close();
     connection?.close();
     session.reset();
+    identity.detach();
   });
 </script>
 
-<div class="container mx-auto max-w-3xl p-4">
-  <h1 class="mb-4 text-2xl font-bold">File Transfer - Offer Page</h1>
+<div class="container mx-auto max-w-3xl p-2 sm:p-4">
+  <h1 class="mb-3 text-xl font-bold sm:text-2xl">File Transfer - Offer Page</h1>
 
   <Collapse title="1. Create Offer Code" isOpen={!offerCode}>
     {#if generating}
@@ -306,6 +321,16 @@
         Create a short code and share it with your peer (chat, call, QR, link). They enter it and
         you connect automatically. Files go directly peer-to-peer; the code is only used once.
       </p>
+      <label class="mb-3 flex items-center gap-2 text-sm">
+        <span class="shrink-0 font-semibold">Your name</span>
+        <input
+          class="input input-bordered input-sm min-w-0 flex-1"
+          maxlength="24"
+          placeholder={identity.me}
+          bind:value={nameInput}
+          onchange={() => identity.rename(nameInput)}
+        />
+      </label>
       <div class="mt-4">
         {#if showOfferOptions}
           <OfferOptions onUpdate={onOptionsUpdate} />
@@ -338,22 +363,30 @@
       <p class="mb-2 font-semibold">A. Send this to your peer</p>
       {#if manualMode}
         <textarea
-          class="textarea textarea-bordered w-full font-mono text-xs h-28"
+          class="textarea textarea-bordered w-full font-mono text-xs h-20 sm:h-28"
           readonly
           value={offerCode}
           onfocus={(e) => (e.currentTarget as HTMLTextAreaElement).select()}
         ></textarea>
       {:else}
-        <div class="text-center font-mono text-4xl tracking-widest select-all my-4">
+        <div class="my-2 text-center font-mono text-2xl tracking-widest select-all sm:text-4xl">
           {offerCode}
         </div>
       {/if}
-      <div class="flex gap-2 flex-wrap mt-2">
-        <button class="btn btn-soft btn-success" onclick={copyOfferCode}>
-          Copy Code <Clipboard />
+
+      <!-- QR of the share link, shown right away -->
+      {#if qrValue}
+        <div class="my-2">
+          <QrModal inline title="Offer code" qrData={qrValue} />
+        </div>
+      {/if}
+
+      <div class="mt-2 flex flex-wrap gap-2">
+        <button class="btn btn-soft btn-success btn-sm sm:btn-md" onclick={copyOfferCode}>
+          Copy Code <Clipboard class="h-4 w-4" />
         </button>
-        <button class="btn btn-soft btn-info" onclick={copyOfferLink}>
-          Copy Link <Clipboard />
+        <button class="btn btn-soft btn-info btn-sm sm:btn-md" onclick={copyOfferLink}>
+          Copy Link <Clipboard class="h-4 w-4" />
         </button>
       </div>
       <p class="text-xs opacity-70 mt-1">
@@ -366,15 +399,25 @@
 
         <p class="mb-2 font-semibold">B. Paste the answer code they send back</p>
         <textarea
-          class="textarea textarea-bordered w-full font-mono text-xs h-28"
+          class="textarea textarea-bordered w-full font-mono text-xs h-20 sm:h-28"
           placeholder="Paste answer code here..."
           bind:value={answerInput}
           disabled={applyingAnswer}
         ></textarea>
-        <div class="flex gap-2 flex-wrap mt-2">
-          <button class="btn btn-ghost" onclick={pasteAnswer}>Paste <Clipboard /></button>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <button class="btn btn-ghost btn-sm sm:btn-md" onclick={pasteAnswer}>
+            Paste <Clipboard class="h-4 w-4" />
+          </button>
+          <ScanQrModal
+            buttonText="Scan answer"
+            modalTitle="Scan the receiver's QR"
+            onScanSuccess={(d) => {
+              answerInput = d.trim();
+              applyAnswer();
+            }}
+          />
           <button
-            class="btn btn-primary"
+            class="btn btn-primary btn-sm sm:btn-md"
             onclick={applyAnswer}
             disabled={applyingAnswer || !answerInput.trim()}
           >

@@ -13,9 +13,11 @@
     Maximize2
   } from '@lucide/svelte';
   import type { CallManager } from '../../utils/mediaCall.svelte';
+  import { identity } from '../Peeridentity.svelte';
 
   type Props = { call: CallManager; peerName?: string };
-  const { call, peerName = 'Peer' }: Props = $props();
+  const { call }: Props = $props();
+  const peerName = $derived(identity.peer);
 
   let minimized = $state(false);
   let showStats = $state(false);

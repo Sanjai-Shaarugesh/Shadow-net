@@ -3,6 +3,8 @@
   import { addToastMessage } from '../stores/toastStore';
   import { Message } from '../proto/message';
   import ScanQrModal from '../components/qr/ScanQrModal.svelte';
+  import QrModal from '../components/qr/QrModal.svelte';
+  import { identity } from './Peeridentity.svelte';
   import Collapse from '../components/layout/Collapse.svelte';
   import { Copy, Key, CircleArrowOutUpLeft } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -34,6 +36,7 @@
 
   // Serverless signaling state
   let offerInput = $state('');
+  let nameInput = $state('');
   let answerCode = $state('');
   let isProcessing = $state(false);
   let isConnecting = $state(false);
@@ -86,6 +89,7 @@
       };
 
       connection = new RTCPeerConnection(config);
+      identity.attach(connection, 'answer'); // I'm "Peer 2" unless renamed; syncs name to the sender
 
       // Chat / call-invites / previews travel on their own pre-negotiated channel.
       call?.destroy();
@@ -191,7 +195,34 @@
     }
   }
 
-  function handleQRScan(data: string) {
+  // Pull the code out of location.hash (share link / scanned link) into the input.
+  function loadFromHash(): boolean {
+    const linked = takeShortCodeFromHash() ?? takeCodeFromHash('offer');
+    if (!linked) return false;
+    offerInput = linked;
+    return true;
+  }
+
+  function handleQRScan(raw: string) {
+    const data = raw.trim();
+    // The sender's QR holds the share link; only its #hash matters
+    if (/^https?:\/\//i.test(data)) {
+      try {
+        const u = new URL(data);
+        if (u.hash.length > 1) {
+          history.replaceState(null, '', u.hash);
+          if (loadFromHash()) {
+            addToastMessage('Code scanned successfully!', 'success');
+            createAnswer();
+            return;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      addToastMessage('That QR link has no connection code.', 'error');
+      return;
+    }
     if (data && (data.length > 20 || looksLikeShortCode(data))) {
       offerInput = data;
       addToastMessage('Code scanned successfully!', 'success');
@@ -209,11 +240,7 @@
     // console.log('📄 Answer page mounted');
 
     // Opened from a share link? Pre-fill the offer code (user still clicks the button)
-    const linkedOffer = takeShortCodeFromHash() ?? takeCodeFromHash('offer');
-    if (linkedOffer) {
-      offerInput = linkedOffer;
-      addToastMessage('Offer code loaded from link', 'success');
-    }
+    if (loadFromHash()) addToastMessage('Offer code loaded from link', 'success');
 
     let gPressed = false;
 
@@ -249,6 +276,7 @@
     ctrl?.close();
     connection?.close();
     session.reset();
+    identity.detach();
     window.location.reload();
   }
 
@@ -257,28 +285,49 @@
     ctrl?.close();
     connection?.close();
     session.reset();
+    identity.detach();
   });
 </script>
 
-<div class="container mx-auto max-w-3xl p-4">
-  <h1 class="mb-4 text-2xl font-bold">File Transfer - Answer Page</h1>
+<div class="container mx-auto max-w-3xl p-2 sm:p-4">
+  <h1 class="mb-3 text-xl font-bold sm:text-2xl">File Transfer - Answer Page</h1>
 
   <Collapse title="1. Connect" isOpen={!isConnecting}>
+    <label class="mb-3 flex items-center gap-2 text-sm">
+      <span class="shrink-0 font-semibold">Your name</span>
+      <input
+        class="input input-bordered input-sm min-w-0 flex-1"
+        maxlength="24"
+        placeholder={identity.me}
+        bind:value={nameInput}
+        onchange={() => identity.rename(nameInput)}
+      />
+    </label>
+
     <p class="mb-2 font-semibold">A. Enter the sender's code</p>
     <textarea
       id="offer-input"
-      class="textarea textarea-bordered w-full font-mono text-xs h-28"
+      class="textarea textarea-bordered w-full font-mono text-xs h-20 sm:h-28"
       placeholder="Enter code, e.g. K7QXM-29PD9 (or paste a link / long offline code)"
       bind:value={offerInput}
       disabled={isProcessing || isConnecting}
     ></textarea>
 
-    <div class="mt-2 flex gap-2 flex-wrap">
-      <button class="btn btn-ghost" onclick={pasteOffer} disabled={isProcessing || isConnecting}>
-        Paste <Copy />
-      </button>
+    <div class="mt-2 flex flex-wrap items-center gap-2">
       <button
-        class="btn btn-outline btn-accent flex-1"
+        class="btn btn-ghost btn-sm sm:btn-md"
+        onclick={pasteOffer}
+        disabled={isProcessing || isConnecting}
+      >
+        Paste <Copy class="h-4 w-4" />
+      </button>
+      <ScanQrModal
+        onScanSuccess={handleQRScan}
+        buttonText="Scan QR"
+        modalTitle="Scan the sender's QR"
+      />
+      <button
+        class="btn btn-outline btn-accent btn-sm sm:btn-md w-full sm:w-auto sm:flex-1"
         onclick={createAnswer}
         disabled={isProcessing || isConnecting || !offerInput.trim()}
       >
@@ -295,18 +344,19 @@
       <div class="divider"></div>
       <p class="mb-2 font-semibold">B. Send this answer code back to the sender</p>
       <textarea
-        class="textarea textarea-bordered w-full font-mono text-xs h-28"
+        class="textarea textarea-bordered w-full font-mono text-xs h-20 sm:h-28"
         readonly
         value={answerCode}
         onfocus={(e) => (e.currentTarget as HTMLTextAreaElement).select()}
       ></textarea>
-      <div class="flex gap-2 flex-wrap mt-2">
+      <div class="mt-2 flex flex-wrap items-center gap-2">
         <button
-          class="btn btn-soft btn-success"
+          class="btn btn-soft btn-success btn-sm sm:btn-md"
           onclick={() => copyText(answerCode, 'Answer code')}
         >
-          Copy Code <Copy />
+          Copy Code <Copy class="h-4 w-4" />
         </button>
+        <QrModal title="Answer code" qrData={answerCode} />
       </div>
       <div class="alert alert-info mt-4">
         <span>Waiting for the sender to paste your answer code...</span>

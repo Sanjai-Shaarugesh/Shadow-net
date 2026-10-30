@@ -3,16 +3,44 @@
   // Offer/Answer steps or the file lists. Colours come from daisyUI CSS variables, so it
   // follows whatever light/dark theme is active.
   import { tick } from 'svelte';
-  import { Phone, Video, Send, Paperclip, Check, CheckCheck, Clock, Trash2 } from '@lucide/svelte';
+  import {
+    Phone,
+    Video,
+    Send,
+    Paperclip,
+    Check,
+    CheckCheck,
+    Clock,
+    Trash2,
+    Pencil
+  } from '@lucide/svelte';
   import { session, MAX_CHAT_LEN } from '../session.svelte';
   import type { CallManager } from '../../utils/mediaCall.svelte';
+  import { identity } from '../Peeridentity.svelte';
 
   type Props = {
     call: CallManager | undefined;
     onAttach: () => void;
     peerName?: string;
   };
-  const { call, onAttach, peerName = 'Peer' }: Props = $props();
+  const { call, onAttach }: Props = $props();
+  // always the synced name (Peer 1 / Peer 2 by default); a peerName prop from the parent is ignored
+  const peerName = $derived(identity.peer);
+
+  let editing = $state(false);
+  let nameDraft = $state('');
+  function startEdit() {
+    nameDraft = identity.me;
+    editing = true;
+  }
+  function saveName() {
+    identity.rename(nameDraft);
+    editing = false;
+  }
+  function focusSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
 
   let draft = $state('');
   let scroller: HTMLDivElement | undefined = $state();
@@ -100,6 +128,14 @@
       </p>
     </div>
     <button
+      class="btn btn-ghost btn-circle btn-sm"
+      aria-label="Edit your name"
+      title="You are {identity.me} - tap to rename"
+      onclick={startEdit}
+    >
+      <Pencil class="h-4 w-4" />
+    </button>
+    <button
       class="btn btn-ghost btn-circle"
       aria-label="Voice call"
       title="Voice call"
@@ -128,6 +164,28 @@
       </button>
     {/if}
   </header>
+
+  {#if editing}
+    <form
+      class="name-edit"
+      onsubmit={(e) => {
+        e.preventDefault();
+        saveName();
+      }}
+    >
+      <input
+        use:focusSelect
+        class="input input-bordered input-sm min-w-0 flex-1"
+        maxlength="24"
+        placeholder="Your name"
+        bind:value={nameDraft}
+      />
+      <button class="btn btn-primary btn-sm" type="submit">Save</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick={() => (editing = false)}
+        >Cancel</button
+      >
+    </form>
+  {/if}
 
   <div class="chat-scroll" bind:this={scroller} onscroll={onScroll}>
     {#if rows.length === 0}
@@ -213,6 +271,15 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    background: var(--color-base-100, #fff);
+    border-bottom: 1px solid color-mix(in oklab, currentColor 12%, transparent);
+    flex: none;
+  }
+  .name-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
     background: var(--color-base-100, #fff);
     border-bottom: 1px solid color-mix(in oklab, currentColor 12%, transparent);
     flex: none;
