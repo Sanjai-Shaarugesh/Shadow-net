@@ -10,6 +10,7 @@
     MicOff,
     SwitchCamera,
     RotateCw,
+    Volume2,
     Minimize2,
     Maximize2
   } from '@lucide/svelte';
@@ -152,6 +153,155 @@
   }
   $effect(() => {
     if (call.phase === 'idle') facing = null;
+  });
+
+  // ---------- remote audio: own <audio> element, speaker routing, HD ----------
+  // Audio no longer depends on the (often hidden / muted-autoplay) remote <video>. A dedicated
+  // <audio> plays it, retries if the browser blocked autoplay, and falls back to the connection's
+  // audio receivers if the remote stream arrived without an audio track.
+  let audioEl: HTMLAudioElement | undefined = $state();
+  let audioPlaying = $state(false); // true => remote <video> stays muted (no double audio)
+  let audioBlocked = $state(false);
+  let fallbackStream: MediaStream | null = null;
+  let fallbackIds = '';
+
+  function audioStream(): MediaStream | null {
+    const rs = call.remoteStream as MediaStream | undefined;
+    if (rs && rs.getAudioTracks().length) return rs;
+    const tracks =
+      findPc()
+        ?.getReceivers()
+        .map((r) => r.track)
+        .filter((t) => t.kind === 'audio' && t.readyState === 'live') ?? [];
+    if (!tracks.length) return rs ?? null;
+    const ids = tracks.map((t) => t.id).join();
+    if (!fallbackStream || ids !== fallbackIds) {
+      fallbackStream = new MediaStream(tracks);
+      fallbackIds = ids;
+    }
+    return fallbackStream;
+  }
+
+  async function bindAudio() {
+    if (!audioEl) return;
+    const s = audioStream();
+    if (audioEl.srcObject !== s) audioEl.srcObject = s;
+    if (!s) return;
+    audioEl.volume = 1;
+    audioEl.muted = false;
+    if (audioEl.paused) {
+      try {
+        await audioEl.play();
+        audioBlocked = false;
+      } catch (e: any) {
+        if (e?.name === 'NotAllowedError') audioBlocked = true;
+      }
+    }
+  }
+
+  $effect(() => {
+    call.remoteStream; // re-run when the stream changes
+    call.remoteLive;
+    if (!audioEl || call.phase !== 'active') return;
+    bindAudio();
+    const id = setInterval(bindAudio, 1500); // late audio track / blocked autoplay: keep trying
+    return () => clearInterval(id);
+  });
+  $effect(() => {
+    if (call.phase === 'idle') {
+      audioBlocked = false;
+      audioPlaying = false;
+      fallbackStream = null;
+      fallbackIds = '';
+    }
+  });
+
+  // Speaker / output device. Chrome (desktop + Android) can route call audio with setSinkId;
+  // iOS Safari / Firefox can't, there the phone's own routing (volume keys, Bluetooth) applies.
+  let outputs: MediaDeviceInfo[] = [];
+  let sinkId = '';
+  const canRoute =
+    typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+
+  async function refreshOutputs() {
+    if (!canRoute) return;
+    try {
+      outputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (d) => d.kind === 'audiooutput'
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+  $effect(() => {
+    if (call.phase !== 'active') return;
+    refreshOutputs();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refreshOutputs);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshOutputs);
+  });
+
+  const outName = (d: MediaDeviceInfo) =>
+    (d.label || 'Speaker').replace(/^(default|communications)\s*-\s*/i, '');
+
+  async function cycleSpeaker() {
+    await refreshOutputs();
+    if (!canRoute || !audioEl || outputs.length < 2) {
+      say('This browser picks the audio output itself. Use the volume keys or Bluetooth settings.');
+      return;
+    }
+    // prefer a real speaker as the first stop, then step through the rest
+    const speaker = outputs.find((d) => /speaker/i.test(d.label) && !/head/i.test(d.label));
+    const i = outputs.findIndex((d) => d.deviceId === sinkId);
+    let next = outputs[(i + 1) % outputs.length];
+    if (i === -1 && speaker) next = speaker;
+    try {
+      await (audioEl as any).setSinkId(next.deviceId);
+      sinkId = next.deviceId;
+      say(`Audio: ${outName(next)}`);
+    } catch {
+      say("Couldn't switch the audio output");
+    }
+  }
+
+  // HD voice (sender side): high Opus bitrate cap + priority, and a clean 48 kHz mic.
+  // The receiver-side cap lives in the SDP: see utils/hdAudio.ts (hdAudioSdp).
+  async function boostAudio() {
+    const sender = findPc()
+      ?.getSenders()
+      .find((x) => x.track?.kind === 'audio');
+    if (sender) {
+      try {
+        const p = sender.getParameters();
+        if (!p.encodings?.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = 128_000;
+        (p.encodings[0] as any).priority = 'high';
+        (p.encodings[0] as any).networkPriority = 'high';
+        await sender.setParameters(p);
+      } catch (e) {
+        console.warn('audio setParameters failed', e);
+      }
+    }
+    const t = (call.localStream as MediaStream | undefined)?.getAudioTracks()[0];
+    if (t) {
+      try {
+        await t.applyConstraints({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 }
+        });
+      } catch (e) {
+        console.warn('audio constraints not applied', e);
+      }
+    }
+  }
+  $effect(() => {
+    call.localStream;
+    if (call.phase !== 'active') return;
+    const id = setTimeout(boostAudio, 800); // after the connection settled
+    return () => clearTimeout(id);
   });
 
   // Follow the phone's rotation: landscape gets a side control rail + wider self-view.
@@ -353,6 +503,24 @@
   }
 </script>
 
+{#if call.phase !== 'idle'}
+  <!-- remote audio plays here (display:none still plays audio) -->
+  <audio
+    bind:this={audioEl}
+    autoplay
+    playsinline
+    style="display:none"
+    onplaying={() => (audioPlaying = true)}
+    onpause={() => (audioPlaying = false)}
+  ></audio>
+{/if}
+
+{#if audioBlocked && call.phase === 'active'}
+  <button class="audio-unlock" onclick={bindAudio}>
+    <Volume2 class="h-5 w-5" /> Tap to hear the call
+  </button>
+{/if}
+
 {#if call.phase === 'incoming'}
   <div class="incoming" role="alertdialog" aria-label="Incoming call">
     <div class="incoming-card">
@@ -408,7 +576,13 @@
     <!-- main picture: remote while active, self-preview while ringing -->
     <div class="stage">
       {#if call.phase === 'active'}
-        <video bind:this={remoteEl} autoplay playsinline class="fill" class:vh={!peerShowsVideo}
+        <video
+          bind:this={remoteEl}
+          autoplay
+          playsinline
+          muted={audioPlaying}
+          class="fill"
+          class:vh={!peerShowsVideo}
         ></video>
         {#if !peerShowsVideo}
           <div class="center-note">
@@ -551,6 +725,14 @@
               <SwitchCamera class="h-6 w-6" />
             </button>
           {/if}
+          <button
+            class="round-sm"
+            aria-label="Speaker / audio output"
+            title="Speaker / audio output"
+            onclick={cycleSpeaker}
+          >
+            <Volume2 class="h-6 w-6" />
+          </button>
           <button class="round-sm end" aria-label="End call" onclick={() => call.end()}>
             <PhoneOff class="h-6 w-6" />
           </button>
@@ -806,6 +988,33 @@
   }
   .call.landscape:not(.mini) .center-note.bg-scrim {
     padding-bottom: 1rem;
+  }
+  .audio-unlock {
+    position: fixed;
+    z-index: 110;
+    left: 50%;
+    top: calc(5rem + env(safe-area-inset-top));
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.1rem;
+    border: none;
+    border-radius: 9999px;
+    font-weight: 600;
+    color: #fff;
+    background: #e5484d;
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.45);
+  }
+  @media (max-width: 480px) {
+    .controls {
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+    .round-sm {
+      width: 3.1rem;
+      height: 3.1rem;
+    }
   }
   .notice {
     position: absolute;

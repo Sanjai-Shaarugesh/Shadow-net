@@ -14,6 +14,7 @@
     takeCodeFromHash,
     type SignalPayload
   } from '../utils/manualSignaling';
+  import { hdAudioSdp } from '../utils/hdAudio';
   import {
     joinSession,
     looksLikeShortCode,
@@ -151,7 +152,10 @@
       }
 
       const answer = await connection.createAnswer();
-      await connection.setLocalDescription({ type: 'answer', sdp: tuneSdp(answer.sdp ?? '') });
+      await connection.setLocalDescription({
+        type: 'answer',
+        sdp: hdAudioSdp(tuneSdp(answer.sdp ?? ''))
+      });
 
       // No signaling server => wait until all ICE candidates are in the SDP
       await waitForIceFast(connection, Math.min(waitIceCandidatesTimeout, 4000));

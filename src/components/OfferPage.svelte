@@ -27,6 +27,7 @@
   import { identity } from './Peeridentity.svelte';
   import SessionShell from '../components/layout/SessionShell.svelte';
   import { ControlChannel } from '../utils/controlChannel';
+  import { hdAudioSdp } from '../utils/hdAudio';
   import { CallManager, tuneSdp } from '../utils/mediaCall.svelte';
   import { session } from './session.svelte';
 
@@ -156,7 +157,10 @@
 
       const offer = await connection.createOffer();
       // Opus: in-band FEC + DTX + 32 kbps cap => clear voice on weak links
-      await connection.setLocalDescription({ type: 'offer', sdp: tuneSdp(offer.sdp ?? '') });
+      await connection.setLocalDescription({
+        type: 'offer',
+        sdp: hdAudioSdp(tuneSdp(offer.sdp ?? ''))
+      });
 
       // No signaling server => candidates can't be trickled, so wait until
       // they are all inside the SDP before packing it into a code.
