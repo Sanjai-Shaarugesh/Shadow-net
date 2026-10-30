@@ -1,13 +1,24 @@
 <script lang="ts">
+  // File card. Before the receiver accepts, it shows a RAW preview built from the real
+  // file bytes (thumbnail / first frame / first KB of text / hex dump) plus full metadata.
+  // Colours use daisyUI tokens so light and dark both stay readable.
   import { FileStatus, type FileDetail } from '../type';
   import { humanFileSize } from '../utils/humanFIleSize';
+  import { hexDump, formatDuration } from '../utils/filePreview';
+  import { session } from './session.svelte';
   import { onDestroy } from 'svelte';
-
-  // Props and reactive variables
-  let file: File | null = null;
-  let objectUrl: string | null = $state(null);
-  let progress = 0;
-  let error: string | null = null;
+  import {
+    File as FileIcon,
+    FileImage,
+    FileVideo,
+    FileAudio,
+    FileText,
+    FileArchive,
+    Play,
+    TriangleAlert,
+    LockKeyhole,
+    Loader
+  } from '@lucide/svelte';
 
   type Props = {
     fileDetail: FileDetail;
@@ -16,163 +27,330 @@
   };
   const { fileDetail, isSender, children }: Props = $props();
 
-  // Handle file input for sender
-  function handleFileChange(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      file = input.files[0];
-      error = null;
-      simulateProgress();
-    }
-  }
+  const key = $derived(fileDetail.metaData.name);
+  const entry = $derived(isSender ? session.out[key] : session.inc[key]);
+  const info = $derived(entry?.info);
+  const preparing = $derived(isSender && entry?.phase === 'preparing');
 
-  // Simulate file transfer progress
-  function simulateProgress() {
-    progress = 0;
-    const interval = setInterval(() => {
-      if (progress >= 100) {
-        clearInterval(interval);
-      } else {
-        progress += 10;
-      }
-    }, 150);
-  }
-
-  // Determine if there's a blob to preview
-  const blobToPreview = $derived(
-    isSender && file
-      ? file
-      : !isSender && fileDetail.status === FileStatus.Success && fileDetail.fileBlob
-        ? fileDetail.fileBlob
+  // full-quality blob once the transfer is done (receiver) or the local file (sender)
+  const fullBlob = $derived<Blob | null>(
+    isSender
+      ? ((fileDetail as any).file ?? null)
+      : fileDetail.status === FileStatus.Success
+        ? ((fileDetail as any).fileBlob ?? null)
         : null
   );
-
-  // Create and clean up object URL for image previews
+  let fullUrl: string | null = $state(null);
   $effect(() => {
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl);
-      objectUrl = null;
-    }
-    if (blobToPreview) {
-      objectUrl = URL.createObjectURL(blobToPreview);
-    }
+    const b = fullBlob;
+    const wantFull =
+      !!b &&
+      (b.type.startsWith('video/') ||
+        b.type.startsWith('audio/') ||
+        (!isSender && b.type.startsWith('image/')));
+    const next = wantFull ? URL.createObjectURL(b!) : null;
+    fullUrl = next;
+    return () => {
+      if (next) URL.revokeObjectURL(next);
+    };
   });
-
-  // Check if the file is an image
-  const isImage = () => fileDetail.metaData.type?.startsWith('image/');
-
-  // Map file extensions to icon URLs
-  const iconMap: Record<string, string> = {
-    pdf: 'https://img.icons8.com/fluency/100/pdf--v2.png',
-    docx: 'https://img.icons8.com/external-others-iconmarket/64/external-docx-file-types-others-iconmarket.png',
-    xlsx: 'https://img.icons8.com/arcade/64/xls.png',
-    mp4: 'https://img.icons8.com/cotton/100/video-file--v1.png',
-    avi: 'https://img.icons8.com/dusk/100/video.png',
-    mp3: 'https://img.icons8.com/external-bearicons-blue-bearicons/100/external-MP3-file-extension-bearicons-blue-bearicons.png',
-    wav: 'https://img.icons8.com/external-bearicons-outline-color-bearicons/100/external-WAV-file-extension-bearicons-outline-color-bearicons.png',
-    zip: 'https://img.icons8.com/dusk/100/zip.png',
-    rar: 'https://img.icons8.com/dusk/100/rar.png',
-    default: 'https://img.icons8.com/arcade/100/file.png',
-    gif: 'https://img.icons8.com/plasticine/100/gif.png',
-    svg: 'https://img.icons8.com/external-bearicons-blue-bearicons/100/external-SVG-file-extension-bearicons-blue-bearicons.png',
-    png: 'https://img.icons8.com/plasticine/100/png.png'
-  };
-
-  // Get the icon URL based on file extension
-  function getIconUrl(fileName: string): string {
-      const extension = fileName.split('.').pop()?.toLowerCase() ?? 'default';
-      return iconMap[extension] || iconMap['default'];
-  }
-
-  // Clean up object URL on component destruction
   onDestroy(() => {
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    if (fullUrl) URL.revokeObjectURL(fullUrl);
   });
+
+  const kind = $derived(info?.kind ?? 'none');
+  const Icon = $derived(
+    fileDetail.metaData.type?.startsWith('image/')
+      ? FileImage
+      : fileDetail.metaData.type?.startsWith('video/')
+        ? FileVideo
+        : fileDetail.metaData.type?.startsWith('audio/')
+          ? FileAudio
+          : kind === 'text'
+            ? FileText
+            : /zip|rar|7z|tar|gz/i.test(fileDetail.metaData.name)
+              ? FileArchive
+              : FileIcon
+  );
+
+  const ratio = $derived(
+    info && info.codec !== 'none' && info.size > 0
+      ? Math.round((1 - info.payloadSize / info.size) * 100)
+      : 0
+  );
+  const risky = $derived(!!info?.sniffed && /executable/i.test(info.sniffed));
+  const encrypted = $derived((fileDetail.metaData.key?.length ?? 0) > 0);
+  const pct = $derived(
+    isNaN(fileDetail.progress) ? 100 : Math.max(0, Math.min(100, fileDetail.progress))
+  );
+  const hex = $derived(kind === 'hex' && entry?.bytes ? hexDump(entry.bytes) : '');
 </script>
 
-<div class="border rounded-lg bg-white [html[data-theme=dark]_&]:bg-gray-800 border-gray-200 [html[data-theme=dark]_&]:border-gray-700 shadow-sm transition-colors w-full max-w-full overflow-x-auto">
-  <div class="p-3 sm:p-4 text-xs xl:text-sm">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-4">
-      <!-- Preview image or icon -->
-      {#if isImage() && fileDetail.status === FileStatus.Success && objectUrl}
-        <div class="w-16 h-16 rounded-md overflow-hidden flex-shrink-0 border border-gray-200 [html[data-theme=dark]_&]:border-gray-700 mx-auto sm:mx-0">
-          <img
-            src={objectUrl}
-            alt={fileDetail.metaData.name}
-            class="w-full h-full object-cover"
-          />
-        </div>
-      {:else}
-        <div class="w-16 h-16 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-100 [html[data-theme=dark]_&]:bg-gray-700 mx-auto sm:mx-0">
-          <img
-            src={getIconUrl(fileDetail.metaData.name)}
-            alt={fileDetail.metaData.name}
-            class="w-12 h-12 object-contain"
-          />
-        </div>
-      {/if}
-
-      <div class="flex-1 text-gray-800 [html[data-theme=dark]_&]:text-gray-200 overflow-hidden">
-        <p class="font-medium text-sm truncate break-all" title={fileDetail.metaData.name}>{fileDetail.metaData.name}</p>
-        <p class="text-xs text-gray-500 [html[data-theme=dark]_&]:text-gray-400 break-all">{humanFileSize(fileDetail.metaData.size)} • {fileDetail.metaData.type || 'Unknown type'}</p>
-
-        <!-- Status badges with glass effect -->
-        <div class="mt-3 sm:mt-4">
-          {#if fileDetail.status === FileStatus.Processing}
-            <div class="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full backdrop-blur-sm bg-blue-500/20 border border-blue-300/30 text-blue-200 text-xs sm:text-sm font-medium">
-              <span class="loading loading-spinner loading-2xs sm:loading-xs"></span>
-              {#if isSender}
-                Sending: {humanFileSize(fileDetail.bitrate)}/sec
-              {:else}
-                Receiving: {humanFileSize(fileDetail.bitrate)}/sec
-              {/if}
-            </div>
-          {:else if fileDetail.error}
-            <div class="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full backdrop-blur-sm bg-red-500/20 border border-red-300/30 text-red-200 text-xs sm:text-sm font-medium">
-              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-              </svg>
-              Error: {fileDetail.error.message}
-            </div>
-          {:else if fileDetail.status === FileStatus.WaitingAccept}
-            <div class="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full backdrop-blur-sm bg-yellow-500/20 border border-yellow-300/30 text-yellow-200 text-xs sm:text-sm font-medium">
-              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-              </svg>
-              Waiting Accept
-            </div>
-          {:else if fileDetail.status === FileStatus.Success}
-            <div class="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full backdrop-blur-sm bg-green-500/20 border border-green-300/30 text-green-200 text-xs sm:text-sm font-medium">
-              <svg class="w-3 h-3 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-              </svg>
-              Success
-            </div>
-          {:else}
-            <div class="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full backdrop-blur-sm bg-gray-500/20 border border-gray-300/30 text-gray-200 text-xs sm:text-sm font-medium">
-              Pending
-            </div>
-          {/if}
-        </div>
-
-        <!-- Progress bar with glass effect -->
-        <div class="mt-3 sm:mt-4 w-full">
-          <div class="flex justify-between text-xs sm:text-sm text-white/70 dark:text-white/70 mb-1.5 sm:mb-2">
-            <span>Progress</span>
-            <span>{isNaN(fileDetail.progress) ? 100 : Math.round(fileDetail.progress)}%</span>
-          </div>
-          <div class="w-full bg-white/10 dark:bg-black/10 backdrop-blur-sm rounded-full h-2 sm:h-2.5 border border-white/20 dark:border-white/10 overflow-hidden">
-            <div
-              class="h-full bg-gradient-to-r from-blue-400 to-purple-500 transition-all duration-300 ease-out rounded-full shadow-md sm:shadow-lg shadow-blue-500/30"
-              style="width: {isNaN(fileDetail.progress) ? 100 : fileDetail.progress}%"
-            ></div>
-          </div>
-        </div>
-
-        <div class="flex justify-end mt-3 w-full">
-          {@render children?.()}
-        </div>
+<article class="fcard">
+  <!-- ======== raw preview ======== -->
+  <div class="pv" class:pv-media={kind === 'image' || kind === 'video'}>
+    {#if preparing}
+      <div class="pv-empty">
+        <Loader class="h-6 w-6 animate-spin" /><span>Building preview…</span>
       </div>
+    {:else if fullUrl && fileDetail.metaData.type?.startsWith('video/')}
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video src={fullUrl} controls playsinline preload="metadata" class="pv-img"></video>
+    {:else if fullUrl && fileDetail.metaData.type?.startsWith('audio/')}
+      <div class="pv-empty w-full"><audio src={fullUrl} controls class="w-full"></audio></div>
+    {:else if fullUrl && fileDetail.metaData.type?.startsWith('image/')}
+      <img src={fullUrl} alt={fileDetail.metaData.name} class="pv-img" />
+    {:else if kind === 'image' && entry?.url}
+      <img src={entry.url} alt="Preview of {fileDetail.metaData.name}" class="pv-img" />
+    {:else if kind === 'video'}
+      <div class="relative w-full">
+        {#if entry?.url}<img src={entry.url} alt="First frame" class="pv-img" />{:else}<div
+            class="pv-empty"
+          >
+            <FileVideo class="h-8 w-8" />
+          </div>{/if}
+        <span class="play"><Play class="h-6 w-6" /></span>
+        {#if info?.duration}<span class="dur">{formatDuration(info.duration)}</span>{/if}
+      </div>
+    {:else if kind === 'audio'}
+      <div class="pv-empty">
+        <FileAudio class="h-8 w-8" /><span>{formatDuration(info?.duration)}</span>
+      </div>
+    {:else if kind === 'text'}
+      <pre class="pv-text">{info?.text}{info?.textTruncated ? '\n…' : ''}</pre>
+    {:else if kind === 'hex'}
+      <pre class="pv-text pv-hex">{hex}</pre>
+    {:else}
+      <div class="pv-empty">
+        <Icon class="h-8 w-8" /><span>{isSender ? 'No preview' : 'Waiting for preview…'}</span>
+      </div>
+    {/if}
+  </div>
+  {#if !preparing && !fullUrl && info}
+    <p class="pv-cap">
+      {#if kind === 'image'}Thumbnail of the actual image
+      {:else if kind === 'video'}First frame of the actual video
+      {:else if kind === 'text'}First {info.text?.length ?? 0} characters of the file
+      {:else if kind === 'hex'}Raw first {entry?.bytes?.length ?? 0} bytes (hex)
+      {:else}No visual preview for this type{/if}
+    </p>
+  {/if}
+
+  <!-- ======== metadata ======== -->
+  <div class="body">
+    <p class="name" title={fileDetail.metaData.name}>{fileDetail.metaData.name}</p>
+
+    {#if risky}
+      <div class="warn">
+        <TriangleAlert class="h-4 w-4 shrink-0" /> This is an executable program. Only accept it from
+        someone you trust.
+      </div>
+    {/if}
+
+    <dl class="meta">
+      <dt>Size</dt>
+      <dd>
+        {humanFileSize(info?.size ?? fileDetail.metaData.size)}
+        {#if ratio > 0}
+          <span class="opacity-70">→ {humanFileSize(info!.payloadSize)} on the wire</span>
+          <span class="badge badge-success badge-soft badge-xs">−{ratio}%</span>
+        {/if}
+      </dd>
+
+      <dt>Type</dt>
+      <dd class="break-all">{fileDetail.metaData.type || 'unknown'}</dd>
+
+      {#if info?.sniffed}
+        <dt>Detected</dt>
+        <dd>{info.sniffed}</dd>
+      {/if}
+      {#if info?.width && info?.height}
+        <dt>Dimensions</dt>
+        <dd>{info.width} × {info.height} px</dd>
+      {/if}
+      {#if info?.duration}
+        <dt>Duration</dt>
+        <dd>{formatDuration(info.duration)}</dd>
+      {/if}
+      {#if info?.lastModified}
+        <dt>Modified</dt>
+        <dd>{new Date(info.lastModified).toLocaleString()}</dd>
+      {/if}
+      {#if info && info.codec !== 'none'}
+        <dt>Compression</dt>
+        <dd>deflate (auto-unpacked on save)</dd>
+      {/if}
+      <dt>Security</dt>
+      <dd class="inline-flex items-center gap-1">
+        {#if encrypted}<LockKeyhole class="h-3.5 w-3.5" /> AES-GCM end-to-end{:else}DTLS transport
+          only{/if}
+      </dd>
+    </dl>
+
+    <!-- status -->
+    <div class="mt-3">
+      {#if fileDetail.error}
+        <span class="badge badge-error badge-soft gap-1"
+          ><TriangleAlert class="h-3.5 w-3.5" /> {fileDetail.error.message}</span
+        >
+      {:else if preparing}
+        <span class="badge badge-info badge-soft gap-1"
+          ><span class="loading loading-spinner loading-xs"></span> Preparing</span
+        >
+      {:else if fileDetail.status === FileStatus.Processing}
+        <span class="badge badge-info badge-soft gap-1">
+          <span class="loading loading-spinner loading-xs"></span>
+          {isSender ? 'Sending' : 'Receiving'} · {humanFileSize(fileDetail.bitrate)}/s
+        </span>
+      {:else if fileDetail.status === FileStatus.WaitingAccept}
+        <span class="badge badge-warning badge-soft"
+          >{isSender ? 'Waiting for receiver to accept' : 'Waiting for your decision'}</span
+        >
+      {:else if fileDetail.status === FileStatus.Success}
+        <span class="badge badge-success badge-soft">Done</span>
+      {:else}
+        <span class="badge badge-ghost">Pending</span>
+      {/if}
+    </div>
+
+    <div class="mt-2">
+      <div class="mb-1 flex justify-between text-xs opacity-70">
+        <span>Progress</span><span>{Math.round(pct)}%</span>
+      </div>
+      <progress class="progress progress-primary w-full" value={pct} max="100"></progress>
+    </div>
+
+    <div class="mt-3 flex w-full justify-end">
+      {@render children?.()}
     </div>
   </div>
-</div>
+</article>
+
+<style>
+  .fcard {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 0.9rem;
+    background: var(--color-base-100, #fff);
+    color: var(--color-base-content, inherit);
+    border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  }
+  .pv {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 6rem;
+    max-height: 16rem;
+    overflow: hidden;
+    background: color-mix(
+      in oklab,
+      var(--color-base-content, #000) 7%,
+      var(--color-base-100, #fff)
+    );
+  }
+  .pv-media {
+    background: #000;
+  }
+  .pv-img {
+    display: block;
+    width: 100%;
+    max-height: 16rem;
+    object-fit: contain;
+  }
+  .pv-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 1.25rem;
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+  .pv-text {
+    width: 100%;
+    max-height: 16rem;
+    margin: 0;
+    padding: 0.75rem;
+    overflow: auto;
+    font:
+      0.72rem/1.4 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    align-self: stretch;
+  }
+  .pv-hex {
+    white-space: pre;
+    overflow-wrap: normal;
+    font-size: 0.65rem;
+  }
+  .pv-cap {
+    margin: 0;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.68rem;
+    opacity: 0.6;
+    border-bottom: 1px solid color-mix(in oklab, currentColor 10%, transparent);
+  }
+  .play,
+  .dur {
+    position: absolute;
+    color: #fff;
+    background: rgb(0 0 0 / 0.55);
+  }
+  .play {
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 9999px;
+  }
+  .dur {
+    right: 0.5rem;
+    bottom: 0.5rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.35rem;
+    font-size: 0.7rem;
+  }
+  .body {
+    padding: 0.75rem 0.85rem 0.85rem;
+  }
+  .name {
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    overflow-wrap: anywhere;
+  }
+  .warn {
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-start;
+    margin: 0.25rem 0 0.5rem;
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    background: color-mix(in oklab, var(--color-warning, #f5a524) 22%, transparent);
+  }
+  .meta {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.2rem 0.75rem;
+    margin: 0;
+    font-size: 0.78rem;
+  }
+  .meta dt {
+    opacity: 0.6;
+  }
+  .meta dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+</style>

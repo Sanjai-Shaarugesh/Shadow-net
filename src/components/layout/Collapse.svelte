@@ -1,62 +1,94 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { tick } from 'svelte';
+  import type { Snippet } from 'svelte';
 
   type Props = {
     title: string;
     isOpen?: boolean;
-    children: () => any;
+    children: Snippet;
     toggleable?: boolean;
   };
 
   let { title, isOpen = $bindable(false), children, toggleable = true }: Props = $props();
 
+  let root: HTMLElement | undefined = $state();
+  let wasOpen = isOpen;
+
   function toggle() {
-    if (toggleable) {
-      isOpen = !isOpen;
-    }
+    if (toggleable) isOpen = !isOpen;
   }
+
+  // When a section opens (by click OR because the parent opened it after a step finished),
+  // bring it into view so it is never left under the sticky navbar / on-screen keyboard.
+  $effect(() => {
+    const open = isOpen;
+    if (open && !wasOpen) {
+      tick().then(() => root?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    }
+    wasOpen = open;
+  });
 </script>
 
-<div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow duration-200 border border-base-300">
+<!-- No overflow-hidden on the card: dropdowns / selects inside an open section may overlap
+     what is below instead of being clipped. The slide transition only clips while animating. -->
+<section
+  bind:this={root}
+  class="collapse-card relative mb-3 min-w-0 rounded-2xl border border-base-300 bg-base-100 shadow-sm transition-shadow duration-200 hover:shadow-md"
+>
   <button
     type="button"
     onclick={toggle}
     disabled={!toggleable}
-    class="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset touch-manipulation rounded-t-2xl
-           {isOpen ? 'bg-primary/10 hover:bg-primary/20' : 'bg-base-200 hover:bg-base-300'}
-           {!toggleable ? 'cursor-default opacity-75' : 'cursor-pointer'}
-           disabled:cursor-not-allowed disabled:opacity-50"
+    aria-expanded={isOpen}
+    class="flex min-h-12 w-full touch-manipulation items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:px-6
+           {isOpen
+      ? 'rounded-t-2xl bg-primary/10 hover:bg-primary/20'
+      : 'rounded-2xl bg-base-200 hover:bg-base-300'}
+           {!toggleable ? 'cursor-default opacity-75' : 'cursor-pointer'}"
   >
-    <div class="flex items-center justify-between gap-2 sm:gap-4">
-      <h3 class="text-sm sm:text-base md:text-lg font-medium transition-colors duration-200 flex-1 min-w-0
-               {isOpen ? 'text-primary' : 'text-base-content'}">
-        <span class="truncate block">{title}</span>
-      </h3>
-      
-      {#if toggleable}
-        <div class="transform transition-transform duration-300 ease-out flex-shrink-0
-                   {isOpen ? 'rotate-180' : 'rotate-0'}">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5 transition-colors duration-200
-                     {isOpen ? 'text-primary' : 'text-base-content/60'}"
-               fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      {/if}
-    </div>
+    <h3
+      class="min-w-0 flex-1 truncate text-sm font-medium sm:text-base md:text-lg {isOpen
+        ? 'text-primary'
+        : 'text-base-content'}"
+    >
+      {title}
+    </h3>
+
+    {#if toggleable}
+      <svg
+        class="h-5 w-5 shrink-0 transition-transform duration-300 {isOpen
+          ? 'rotate-180 text-primary'
+          : 'text-base-content/60'}"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    {/if}
   </button>
 
   {#if isOpen}
-    <div 
-      transition:slide={{ duration: 400, easing: quintOut }} 
-      class="border-t border-base-300 bg-base-100"
+    <div
+      transition:slide={{ duration: 250, easing: quintOut }}
+      class="rounded-b-2xl border-t border-base-300 bg-base-100"
     >
-      <div class="px-3 sm:px-4 md:px-6 py-3 sm:py-4 text-sm sm:text-base text-base-content/80 leading-relaxed">
-        <div class="animate-in fade-in-0 slide-in-from-top-2 duration-300">
-          {@render children?.()}
-        </div>
+      <div
+        class="min-w-0 break-words px-4 py-4 text-sm leading-relaxed text-base-content/90 sm:text-base md:px-6"
+      >
+        {@render children?.()}
       </div>
     </div>
   {/if}
-</div>
+</section>
+
+<style>
+  .collapse-card {
+    /* leave room for the sticky/safe-area navbar when scrolled into view */
+    scroll-margin-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+    scroll-margin-bottom: 1rem;
+  }
+</style>
