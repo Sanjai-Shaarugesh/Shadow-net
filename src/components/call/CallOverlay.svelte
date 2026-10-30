@@ -9,6 +9,7 @@
     Mic,
     MicOff,
     SwitchCamera,
+    RotateCw,
     Minimize2,
     Maximize2
   } from '@lucide/svelte';
@@ -37,6 +38,12 @@
     if (call.phase === 'idle') minimized = false;
   });
 
+  // phones / tablets only: the mirror rule and the rotate button depend on it
+  const isMobile =
+    typeof matchMedia !== 'undefined' &&
+    (matchMedia('(pointer: coarse)').matches ||
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
   // ---------- camera switch (front <-> back) ----------
   // The old switch re-opened the camera (and the mic) while the current camera was still running,
   // which phones refuse ("camera/mic is used by another app"). Here: video only, release the old
@@ -44,7 +51,8 @@
   let switching = $state(false);
   let notice = $state('');
   let facing: 'user' | 'environment' | null = $state(null); // set after our own switch
-  const mirrored = $derived((facing ?? call.facing) === 'user');
+  // self-view is mirrored on PC (webcam) only; phones show the true, un-mirrored picture
+  const mirrored = !isMobile;
 
   function findPc(): RTCPeerConnection | undefined {
     const c = call as any;
@@ -155,30 +163,93 @@
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
   });
-  // Phones keep capturing in the orientation the camera was opened in, so after rotating the
-  // other side (PC) still got a portrait picture. Re-shape the capture to match the screen.
-  async function matchCaptureToOrientation() {
-    if (!matchMedia('(pointer: coarse)').matches) return; // phones/tablets only, never a PC webcam
-    const t = (call.localStream as MediaStream | undefined)?.getVideoTracks()[0];
+  // Phones keep capturing in the orientation the camera was opened in, so after rotating, the
+  // other side (PC) still got a portrait picture. Re-shape the capture (front AND back camera).
+  // `manual` = the rotate button forced an orientation; turning the phone clears it again.
+  let manual: boolean | null = $state(null); // true = landscape, false = portrait
+  let reshaping = false;
+  const liveTrack = () => (call.localStream as MediaStream | undefined)?.getVideoTracks()[0];
+
+  // Last resort (some back cameras ignore applyConstraints): re-open the SAME camera at the new
+  // shape and swap the track on the live connection.
+  async function reopenShaped(wantLandscape: boolean) {
+    const pc = findPc();
+    const stream = call.localStream as MediaStream | undefined;
+    const old = liveTrack();
+    const sender = pc?.getSenders().find((x) => x.track === old || x.track?.kind === 'video');
+    if (!pc || !stream || !old || !sender) return;
+    const st = old.getSettings();
+    const long = Math.max(st.width ?? 1280, st.height ?? 720);
+    const short = Math.min(st.width ?? 1280, st.height ?? 720);
+    const same: MediaTrackConstraints = st.deviceId ? { deviceId: { exact: st.deviceId } } : {};
+    const wasEnabled = old.enabled;
+    old.stop();
+    await new Promise((r) => setTimeout(r, 200));
+    let next = await open({
+      ...same,
+      width: { ideal: wantLandscape ? long : short },
+      height: { ideal: wantLandscape ? short : long }
+    });
+    if (!next) next = await open(same);
+    if (!next) return say('Camera unavailable. Tap the camera button to turn it back on.');
+    next.enabled = wasEnabled;
+    await sender.replaceTrack(next);
+    stream.removeTrack(old);
+    stream.addTrack(next);
+  }
+
+  async function reshape(wantLandscape: boolean) {
+    if (reshaping || switching) return;
+    const t = liveTrack();
     if (!t || t.readyState !== 'live') return;
     const { width, height } = t.getSettings();
-    if (!width || !height) return;
-    if (landscape === width > height) return; // already the right shape
-    const long = Math.max(width, height);
-    const short = Math.min(width, height);
+    if (!width || !height || width > height === wantLandscape) return; // already right
+    reshaping = true;
     try {
-      await t.applyConstraints({
-        width: { ideal: landscape ? long : short },
-        height: { ideal: landscape ? short : long },
-        aspectRatio: { ideal: landscape ? long / short : short / long }
-      });
-    } catch (e) {
-      console.warn('could not re-shape capture after rotation', e);
+      const long = Math.max(width, height);
+      const short = Math.min(width, height);
+      try {
+        await t.applyConstraints({
+          width: { ideal: wantLandscape ? long : short },
+          height: { ideal: wantLandscape ? short : long },
+          aspectRatio: { ideal: wantLandscape ? long / short : short / long }
+        });
+      } catch (e) {
+        console.warn('applyConstraints failed, re-opening camera', e);
+      }
+      await new Promise((r) => setTimeout(r, 250));
+      const s2 = t.getSettings();
+      if (
+        t.readyState === 'live' &&
+        s2.width &&
+        s2.height &&
+        s2.width > s2.height !== wantLandscape
+      ) {
+        await reopenShaped(wantLandscape);
+      }
+    } finally {
+      reshaping = false;
     }
   }
+
+  function matchCaptureToOrientation() {
+    if (isMobile) reshape(manual ?? landscape);
+  }
+
+  /** Rotate button: send the other orientation (landscape <-> portrait). */
+  function toggleOrientation() {
+    manual = !(manual ?? landscape);
+  }
+
+  $effect(() => {
+    landscape; // turning the phone hands control back to the sensor
+    manual = null;
+  });
+
   let rotTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    landscape; // re-run on every rotation
+    landscape;
+    manual;
     call.localStream; // ...and when the camera (re)starts
     if (call.phase !== 'active' || call.kind !== 'video') return;
     clearTimeout(rotTimer);
@@ -459,6 +530,17 @@
           >
             {#if call.camOn}<Video class="h-6 w-6" />{:else}<VideoOff class="h-6 w-6" />{/if}
           </button>
+          {#if isVideo && isMobile}
+            <button
+              class="round-sm"
+              aria-label={(manual ?? landscape) ? 'Send portrait video' : 'Send landscape video'}
+              title={(manual ?? landscape) ? 'Send portrait video' : 'Send landscape video'}
+              class:off={manual !== null}
+              onclick={toggleOrientation}
+            >
+              <RotateCw class="h-6 w-6" />
+            </button>
+          {/if}
           {#if isVideo}
             <button
               class="round-sm"
