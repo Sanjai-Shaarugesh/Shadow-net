@@ -37,6 +37,26 @@
     if (call.phase === 'idle') minimized = false;
   });
 
+  // Follow the phone's rotation: landscape gets a side control rail + wider self-view.
+  let landscape = $state(false);
+  $effect(() => {
+    const mq = matchMedia('(orientation: landscape)');
+    landscape = mq.matches;
+    const on = (e: MediaQueryListEvent) => (landscape = e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
+  // Make sure nothing keeps the screen locked to portrait while a call is up.
+  $effect(() => {
+    if (call.phase === 'active' || call.phase === 'outgoing') {
+      try {
+        (screen.orientation as any)?.unlock?.();
+      } catch {
+        /* not supported / not locked */
+      }
+    }
+  });
+
   const clock = $derived(
     `${Math.floor(call.seconds / 60)}:${String(call.seconds % 60).padStart(2, '0')}`
   );
@@ -169,6 +189,7 @@
   <div
     class="call"
     class:mini={minimized && call.phase === 'active'}
+    class:landscape
     use:drag={minimized && call.phase === 'active'}
     role="dialog"
     aria-label="Call"
@@ -526,6 +547,36 @@
     .pip {
       width: 10rem;
     }
+  }
+  /* ---------- landscape (phone rotated) ---------- */
+  .call.landscape:not(.mini) .topbar {
+    padding-top: calc(0.4rem + env(safe-area-inset-top));
+    padding-bottom: 0.4rem;
+  }
+  .call.landscape:not(.mini) .controls {
+    left: auto;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.5rem calc(0.6rem + env(safe-area-inset-right)) 0.5rem 0.6rem;
+    background: linear-gradient(to left, rgb(0 0 0 / 0.55), transparent);
+  }
+  .call.landscape:not(.mini) .round-sm {
+    width: 3rem;
+    height: 3rem;
+  }
+  .call.landscape:not(.mini) .pip {
+    aspect-ratio: 4 / 3;
+    width: 9rem;
+    top: calc(3.25rem + env(safe-area-inset-top));
+    right: calc(4.75rem + env(safe-area-inset-right));
+  }
+  .call.landscape:not(.mini) .center-note.bg-scrim {
+    padding-bottom: 1rem;
   }
   .pip-off {
     position: absolute;
