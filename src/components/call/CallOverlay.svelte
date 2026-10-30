@@ -125,6 +125,7 @@
       await sender.replaceTrack(next);
       stream.removeTrack(old);
       stream.addTrack(next);
+      setTimeout(matchCaptureToOrientation, 300);
 
       const f = next.getSettings().facingMode as 'user' | 'environment' | undefined;
       facing = restored ? current : (f ?? target);
@@ -154,6 +155,37 @@
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
   });
+  // Phones keep capturing in the orientation the camera was opened in, so after rotating the
+  // other side (PC) still got a portrait picture. Re-shape the capture to match the screen.
+  async function matchCaptureToOrientation() {
+    if (!matchMedia('(pointer: coarse)').matches) return; // phones/tablets only, never a PC webcam
+    const t = (call.localStream as MediaStream | undefined)?.getVideoTracks()[0];
+    if (!t || t.readyState !== 'live') return;
+    const { width, height } = t.getSettings();
+    if (!width || !height) return;
+    if (landscape === width > height) return; // already the right shape
+    const long = Math.max(width, height);
+    const short = Math.min(width, height);
+    try {
+      await t.applyConstraints({
+        width: { ideal: landscape ? long : short },
+        height: { ideal: landscape ? short : long },
+        aspectRatio: { ideal: landscape ? long / short : short / long }
+      });
+    } catch (e) {
+      console.warn('could not re-shape capture after rotation', e);
+    }
+  }
+  let rotTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    landscape; // re-run on every rotation
+    call.localStream; // ...and when the camera (re)starts
+    if (call.phase !== 'active' || call.kind !== 'video') return;
+    clearTimeout(rotTimer);
+    rotTimer = setTimeout(matchCaptureToOrientation, 400); // let the camera settle first
+    return () => clearTimeout(rotTimer);
+  });
+
   // Make sure nothing keeps the screen locked to portrait while a call is up.
   $effect(() => {
     if (call.phase === 'active' || call.phase === 'outgoing') {
