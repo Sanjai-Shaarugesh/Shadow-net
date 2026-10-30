@@ -37,6 +37,114 @@
     if (call.phase === 'idle') minimized = false;
   });
 
+  // ---------- camera switch (front <-> back) ----------
+  // The old switch re-opened the camera (and the mic) while the current camera was still running,
+  // which phones refuse ("camera/mic is used by another app"). Here: video only, release the old
+  // camera FIRST, open the new one, then swap the track on the live connection (no renegotiation).
+  let switching = $state(false);
+  let notice = $state('');
+  let facing: 'user' | 'environment' | null = $state(null); // set after our own switch
+  const mirrored = $derived((facing ?? call.facing) === 'user');
+
+  function findPc(): RTCPeerConnection | undefined {
+    const c = call as any;
+    for (const k of ['pc', 'connection', 'peerConnection', 'peer', '_pc', 'conn']) {
+      if (c[k] instanceof RTCPeerConnection) return c[k];
+    }
+    return Object.values(c).find((v) => v instanceof RTCPeerConnection) as
+      | RTCPeerConnection
+      | undefined;
+  }
+
+  function say(msg: string) {
+    notice = msg;
+    setTimeout(() => (notice = ''), 2500);
+  }
+
+  async function open(c: MediaTrackConstraints): Promise<MediaStreamTrack | undefined> {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: c, audio: false });
+      return s.getVideoTracks()[0];
+    } catch (e) {
+      console.warn('camera open failed', c, e);
+      return undefined;
+    }
+  }
+
+  async function switchCam() {
+    if (switching) return;
+    const pc = findPc();
+    const stream = call.localStream as MediaStream | undefined;
+    const old = stream?.getVideoTracks()[0];
+    const sender = pc?.getSenders().find((x) => x.track === old || x.track?.kind === 'video');
+    if (!pc || !stream || !old || !sender) {
+      console.warn('switchCam: connection/stream not reachable, using call.switchCamera()');
+      call.switchCamera();
+      return;
+    }
+
+    switching = true;
+    try {
+      const st = old.getSettings();
+      const current = ((st.facingMode as string | undefined) ?? facing ?? call.facing ?? 'user') as
+        | 'user'
+        | 'environment';
+      const target = current === 'user' ? 'environment' : 'user';
+      const oldId = st.deviceId;
+      const size: MediaTrackConstraints = {};
+      if (st.width) size.width = { ideal: st.width };
+      if (st.height) size.height = { ideal: st.height };
+      if (st.frameRate) size.frameRate = { ideal: st.frameRate };
+      const wasEnabled = old.enabled;
+
+      old.stop(); // free the camera first: phones can't open two cameras at once
+      await new Promise((r) => setTimeout(r, 200));
+
+      let next = await open({ ...size, facingMode: { exact: target } });
+      if (!next) {
+        // no facingMode support (some browsers/desktops): step to the next camera by id
+        const cams = (await navigator.mediaDevices.enumerateDevices()).filter(
+          (d) => d.kind === 'videoinput' && d.deviceId
+        );
+        const i = cams.findIndex((d) => d.deviceId === oldId);
+        const other = cams.length > 1 ? cams[(i + 1) % cams.length] : undefined;
+        if (other) next = await open({ ...size, deviceId: { exact: other.deviceId } });
+      }
+      let restored = false;
+      if (!next) {
+        // could not switch: get the previous camera back so the call keeps its video
+        next = await open({ ...size, ...(oldId ? { deviceId: { exact: oldId } } : {}) });
+        restored = true;
+      }
+      if (!next) {
+        say('Camera unavailable. Tap the camera button to turn it back on.');
+        return;
+      }
+
+      next.enabled = wasEnabled;
+      await sender.replaceTrack(next);
+      stream.removeTrack(old);
+      stream.addTrack(next);
+
+      const f = next.getSettings().facingMode as 'user' | 'environment' | undefined;
+      facing = restored ? current : (f ?? target);
+      try {
+        (call as any).facing = facing;
+      } catch {
+        /* read-only in CallManager: the overlay keeps its own copy */
+      }
+      if (restored) say("Couldn't switch camera");
+    } catch (e) {
+      console.error('switchCam failed', e);
+      say("Couldn't switch camera");
+    } finally {
+      switching = false;
+    }
+  }
+  $effect(() => {
+    if (call.phase === 'idle') facing = null;
+  });
+
   // Follow the phone's rotation: landscape gets a side control rail + wider self-view.
   let landscape = $state(false);
   $effect(() => {
@@ -225,7 +333,7 @@
           muted
           class="fill"
           class:vh={!isVideo}
-          style:transform={call.facing === 'user' ? 'scaleX(-1)' : 'none'}
+          style:transform={mirrored ? 'scaleX(-1)' : 'none'}
         ></video>
         <div class="center-note" class:bg-scrim={isVideo}>
           {#if !isVideo}<div class="avatar-xl">{peerName.slice(0, 1).toUpperCase()}</div>{/if}
@@ -293,11 +401,13 @@
             playsinline
             muted
             class="fill"
-            style:transform={call.facing === 'user' ? 'scaleX(-1)' : 'none'}
+            style:transform={mirrored ? 'scaleX(-1)' : 'none'}
           ></video>
           {#if !call.camOn}<div class="pip-off"><VideoOff class="h-6 w-6" /></div>{/if}
         </div>
       {/if}
+
+      {#if notice}<div class="notice" role="status">{notice}</div>{/if}
 
       <div class="controls">
         {#if call.phase === 'active'}
@@ -318,7 +428,12 @@
             {#if call.camOn}<Video class="h-6 w-6" />{:else}<VideoOff class="h-6 w-6" />{/if}
           </button>
           {#if isVideo}
-            <button class="round-sm" aria-label="Switch camera" onclick={() => call.switchCamera()}>
+            <button
+              class="round-sm"
+              aria-label="Switch camera"
+              disabled={switching}
+              onclick={switchCam}
+            >
               <SwitchCamera class="h-6 w-6" />
             </button>
           {/if}
@@ -577,6 +692,19 @@
   }
   .call.landscape:not(.mini) .center-note.bg-scrim {
     padding-bottom: 1rem;
+  }
+  .notice {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: calc(6.5rem + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    max-width: 80%;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    text-align: center;
+    border-radius: 9999px;
+    background: rgb(0 0 0 / 0.7);
   }
   .pip-off {
     position: absolute;
