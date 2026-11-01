@@ -25,11 +25,19 @@
   import QrModal from '../components/qr/QrModal.svelte';
   import ScanQrModal from '../components/qr/ScanQrModal.svelte';
   import { identity } from './Peeridentity.svelte';
-  import SessionShell from '../components/layout/SessionShell.svelte';
+  import SessionShell from './SessionShell.svelte';
   import { ControlChannel } from '../utils/controlChannel';
   import { hdAudioSdp } from '../utils/hdAudio';
   import { CallManager, tuneSdp } from '../utils/mediaCall.svelte';
   import { session } from './session.svelte';
+  import { hub } from '../utils/groups.svelte';
+  import GroupsPanel from '../components/GroupsPanel.svelte';
+
+  // Groups section: opens itself when the page was opened from a group invite link
+  let groupsOpen = $state(false);
+  $effect(() => {
+    if (hub.pendingInvite) groupsOpen = true;
+  });
 
   let sendOptions = $state(defaultSendOptions);
   let rsa: CryptoKeyPair | undefined = $state(undefined);
@@ -62,7 +70,7 @@
   let sender: Sender | undefined = $state(undefined);
   let showNewFile = $state(false);
   let showOfferOptions = $state(false);
-  let tab: 'chat' | 'send' | 'receive' = $state('chat');
+  let tab: 'chat' | 'send' | 'receive' | 'groups' = $state('chat');
 
   let ctrl: ControlChannel | undefined = $state(undefined);
   let call: CallManager | undefined = $state(undefined);
@@ -82,8 +90,16 @@
     identity.attach(connection, 'offer'); // I'm "Peer 1" unless renamed; syncs name to the receiver
 
     connection.onicecandidateerror = (err) => {
-      console.error('❌ ICE Candidate error:', err);
-      addToastMessage('ICE Candidate error', 'error');
+      // 701 = a STUN server could not be reached from one network interface (typically IPv6 or a
+      // VPN). Other interfaces still work, so this is not a connection failure - don't alarm the user.
+      if ((err as RTCPeerConnectionIceErrorEvent).errorCode === 701) {
+        console.debug(
+          'STUN unreachable on one interface (ignored):',
+          (err as RTCPeerConnectionIceErrorEvent).url
+        );
+        return;
+      }
+      console.warn('ICE candidate error:', err);
     };
 
     // Chat / call-invites / previews travel on their own pre-negotiated channel.
@@ -273,7 +289,7 @@
   }
 
   onMount(() => {
-    // console.log('📄 Offer page mounted');
+    void hub.init(); // start receiving group messages as soon as the page opens
 
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() == 'o') {
@@ -442,6 +458,17 @@
       </div>
     {/if}
   </Collapse>
+
+  {#if !isConnecting}
+    <Collapse
+      title={hub.totalUnread ? `Groups (${hub.totalUnread})` : 'Groups'}
+      isOpen={groupsOpen}
+    >
+      <div class="h-[70dvh]">
+        <GroupsPanel />
+      </div>
+    </Collapse>
+  {/if}
 
   <Toast />
 </div>

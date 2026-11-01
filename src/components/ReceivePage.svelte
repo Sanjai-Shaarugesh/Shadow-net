@@ -30,10 +30,18 @@
   import Receiver from '../components/receiver/Receiver.svelte';
   import Sender from '../components/sender/Sender.svelte';
   import Toast from '../components/Toast.svelte';
-  import SessionShell from '../components/layout/SessionShell.svelte';
+  import SessionShell from './SessionShell.svelte';
   import { ControlChannel } from '../utils/controlChannel';
   import { CallManager, tuneSdp } from '../utils/mediaCall.svelte';
   import { session } from './session.svelte';
+  import { hub } from '../utils/groups.svelte';
+  import GroupsPanel from '../components/GroupsPanel.svelte';
+
+  // Groups section: opens itself when the page was opened from a group invite link
+  let groupsOpen = $state(false);
+  $effect(() => {
+    if (hub.pendingInvite) groupsOpen = true;
+  });
 
   // Serverless signaling state
   let offerInput = $state('');
@@ -48,7 +56,7 @@
   let receiver: Receiver | undefined = $state(undefined);
   let sender: Sender | undefined = $state(undefined);
   let showNewFile = $state(false);
-  let tab: 'chat' | 'send' | 'receive' = $state('chat');
+  let tab: 'chat' | 'send' | 'receive' | 'groups' = $state('chat');
 
   let connection: RTCPeerConnection | undefined = $state(undefined);
   let ctrl: ControlChannel | undefined = $state(undefined);
@@ -241,7 +249,7 @@
   }
 
   onMount(() => {
-    // console.log('📄 Answer page mounted');
+    void hub.init(); // start receiving group messages as soon as the page opens
 
     // Opened from a share link? Pre-fill the offer code (user still clicks the button)
     if (loadFromHash()) addToastMessage('Offer code loaded from link', 'success');
@@ -375,6 +383,17 @@
       </a>
     </div>
   </Collapse>
+
+  {#if !isConnecting}
+    <Collapse
+      title={hub.totalUnread ? `Groups (${hub.totalUnread})` : 'Groups'}
+      isOpen={groupsOpen}
+    >
+      <div class="h-[70dvh]">
+        <GroupsPanel />
+      </div>
+    </Collapse>
+  {/if}
 
   <Toast />
 </div>
