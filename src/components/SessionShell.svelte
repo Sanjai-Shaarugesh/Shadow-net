@@ -4,13 +4,15 @@
   // tab bar. Desktop (>=1024px): chat on the left, files on the right.
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
-  import { MessageCircle, Upload, Download, ArrowLeft } from '@lucide/svelte';
-  import ChatPanel from '../chat/ChatPanel.svelte';
-  import CallOverlay from '../call/CallOverlay.svelte';
-  import { session } from '../session.svelte';
-  import type { CallManager } from '../../utils/mediaCall.svelte';
+  import { MessageCircle, Upload, Download, ArrowLeft, Users } from '@lucide/svelte';
+  import ChatPanel from './chat/ChatPanel.svelte';
+  import CallOverlay from './call/CallOverlay.svelte';
+  import { session } from './session.svelte';
+  import GroupsPanel from './GroupsPanel.svelte';
+  import { hub } from '../utils/groups.svelte';
+  import type { CallManager } from '../utils/mediaCall.svelte';
 
-  type Tab = 'chat' | 'send' | 'receive';
+  type Tab = 'chat' | 'send' | 'receive' | 'groups';
   type Props = {
     call: CallManager | undefined;
     tab?: Tab;
@@ -61,6 +63,7 @@
       vv?.removeEventListener('scroll', onVv);
       document.body.style.overflow = prevOverflow;
       session.chatVisible = false;
+      hub.panelVisible = true;
     };
   });
 
@@ -73,8 +76,15 @@
   $effect(() => {
     if (tab === 'receive') newFiles = false;
   });
-  // on desktop the chat is always open, so "files" means send or receive
-  const filesTab = $derived<'send' | 'receive'>(tab === 'receive' ? 'receive' : 'send');
+  // group messages only count as "seen" while the Groups tab is on screen
+  $effect(() => {
+    hub.panelVisible = tab === 'groups';
+    if (tab === 'groups' && hub.activeGid) hub.open(hub.activeGid);
+  });
+  // on desktop the chat is always open, so "files" means send, receive or groups
+  const filesTab = $derived<'send' | 'receive' | 'groups'>(
+    tab === 'receive' ? 'receive' : tab === 'groups' ? 'groups' : 'send'
+  );
 </script>
 
 <div class="shell" style:height={appH} style:top={appTop}>
@@ -106,6 +116,17 @@
         {#if newFiles}<span class="badge badge-success badge-xs absolute -right-1 -top-1">new</span
           >{/if}
       </button>
+      <button
+        class="btn btn-sm join-item relative"
+        class:btn-primary={filesTab === 'groups'}
+        onclick={() => (tab = 'groups')}
+      >
+        <Users class="h-4 w-4" /> Groups
+        {#if hub.totalUnread > 0 && tab !== 'groups'}<span
+            class="badge badge-success badge-xs absolute -right-1 -top-1"
+            >{hub.totalUnread > 99 ? '99+' : hub.totalUnread}</span
+          >{/if}
+      </button>
     </div>
   </header>
 
@@ -123,6 +144,10 @@
     </div>
     <div class="pane files" class:show={tab === 'receive'}>
       <div class="pane-scroll">{@render receivePane()}</div>
+    </div>
+    <!-- Groups stay mounted too, so their messages and direct links keep working in the background -->
+    <div class="pane files" class:show={tab === 'groups'}>
+      <div class="pane-groups"><GroupsPanel /></div>
     </div>
   </main>
 
@@ -149,6 +174,17 @@
           >{/if}
       </span>
       <span>Receive</span>
+    </button>
+    <button class:active={tab === 'groups'} onclick={() => (tab = 'groups')}>
+      <span class="relative">
+        <Users class="h-6 w-6" />
+        {#if hub.totalUnread > 0 && tab !== 'groups'}
+          <span class="badge badge-success badge-xs absolute -right-3 -top-2"
+            >{hub.totalUnread > 99 ? '99+' : hub.totalUnread}</span
+          >
+        {/if}
+      </span>
+      <span>Groups</span>
     </button>
   </nav>
 </div>
@@ -199,6 +235,13 @@
     overscroll-behavior: contain;
     padding: 0.75rem;
     -webkit-overflow-scrolling: touch;
+  }
+  .pane-groups {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem;
   }
   .tabbar {
     flex: none;
